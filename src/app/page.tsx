@@ -18,6 +18,7 @@ import {
   PackageCheck,
   RotateCcw,
   Plus,
+  UserCheck,
 } from "lucide-react";
 
 type Role = "STUDENT" | "FACULTY" | "LAB_ADMIN";
@@ -83,6 +84,24 @@ interface AiResolution {
 
 const HOURS = [9, 10, 11, 12, 13, 14, 15, 16, 17, 18];
 
+const SANDBOX_PERSONAS: Record<Role, { badge: string; fullName: string; workspaceTitle: string }> = {
+  STUDENT: {
+    badge: "Student: Aarav",
+    fullName: "Aarav Sharma (1MS23CS042)",
+    workspaceTitle: "Student Workbench",
+  },
+  FACULTY: {
+    badge: "Faculty: Dr. Kavita Rao",
+    fullName: "Dr. Kavita Rao (CSE Lab Mentor)",
+    workspaceTitle: "Faculty Approval Console",
+  },
+  LAB_ADMIN: {
+    badge: "Lab Admin: Prof. R. Menon",
+    fullName: "Prof. R. Menon (Central Instrumentation)",
+    workspaceTitle: "Handover & Telemetry Console",
+  },
+};
+
 const INITIAL_PROJECTS: StudentProject[] = [
   {
     id: "proj_capstone",
@@ -104,6 +123,9 @@ const INITIAL_PROJECTS: StudentProject[] = [
 
 export default function LabLinkConsole() {
   const [role, setRole] = useState<Role>("STUDENT");
+  const [sessionReady, setSessionReady] = useState(false);
+  const [switchingRole, setSwitchingRole] = useState(false);
+
   const [equipment, setEquipment] = useState<EquipmentItem[]>([]);
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
   const [loadingData, setLoadingData] = useState(true);
@@ -161,7 +183,67 @@ export default function LabLinkConsole() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
+  // Initialize or synchronize signed HttpOnly RBAC session cookie (zero login wall)
+  useEffect(() => {
+    let active = true;
+    async function initSandboxSession() {
+      try {
+        const checkRes = await fetch("/api/auth/session", { credentials: "same-origin" });
+        const checkData = await checkRes.json();
+        if (checkData.authenticated && checkData.actor?.role) {
+          if (active) {
+            setRole(checkData.actor.role);
+            setSessionReady(true);
+          }
+          return;
+        }
+
+        const createRes = await fetch("/api/auth/session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({ role: "STUDENT" }),
+        });
+        if (createRes.ok && active) {
+          setRole("STUDENT");
+          setSessionReady(true);
+        }
+      } catch {
+        if (active) setSessionReady(true);
+      }
+    }
+    initSandboxSession();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  async function handleSandboxRoleSwitch(nextRole: Role) {
+    if (nextRole === role || switchingRole) return;
+    setSwitchingRole(true);
+    try {
+      const res = await fetch("/api/auth/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ role: nextRole }),
+      });
+      if (res.ok) {
+        setRole(nextRole);
+        notify("success", `Signed HttpOnly RBAC session active: ${SANDBOX_PERSONAS[nextRole].fullName}`);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        notify("warn", err.error || `Session switch failed (${res.status})`);
+      }
+    } catch {
+      notify("warn", "Could not reach /api/auth/session — ensure dev server is running.");
+    } finally {
+      setSwitchingRole(false);
+    }
+  }
+
   const fetchPlatformData = useCallback(async () => {
+    if (!sessionReady) return;
     setLoadingData(true);
     try {
       const params = new URLSearchParams();
@@ -169,8 +251,8 @@ export default function LabLinkConsole() {
       if (departmentFilter !== "ALL") params.set("department", departmentFilter);
 
       const [eqRes, bkRes] = await Promise.all([
-        fetch(`/api/equipment?${params.toString()}`),
-        fetch("/api/bookings", { headers: { "x-demo-role": role } }),
+        fetch(`/api/equipment?${params.toString()}`, { credentials: "same-origin" }),
+        fetch("/api/bookings", { credentials: "same-origin" }),
       ]);
 
       if (eqRes.ok) {
@@ -188,7 +270,7 @@ export default function LabLinkConsole() {
     } finally {
       setLoadingData(false);
     }
-  }, [searchQuery, departmentFilter, role, selectedEquipmentId]);
+  }, [sessionReady, searchQuery, departmentFilter, role, selectedEquipmentId]);
 
   useEffect(() => {
     fetchPlatformData();
@@ -204,7 +286,6 @@ export default function LabLinkConsole() {
     [equipment, selectedEquipmentId]
   );
 
-  // Student 30-day fairness usage hours (base 4.5h + active session hours)
   const monthlyUsedHours = useMemo(() => {
     const added = bookings
       .filter((b) => b.status !== "REJECTED")
@@ -302,10 +383,8 @@ export default function LabLinkConsole() {
 
       const res = await fetch("/api/ai/resolve-conflict", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-demo-role": "STUDENT",
-        },
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
         body: JSON.stringify({
           requestedEquipment: {
             id: item.id,
@@ -356,10 +435,8 @@ export default function LabLinkConsole() {
     try {
       const res = await fetch("/api/bookings", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-demo-role": "STUDENT",
-        },
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
         body: JSON.stringify({
           equipmentId: targetEquipmentId,
           projectId: activeProject.id,
@@ -394,16 +471,11 @@ export default function LabLinkConsole() {
     }
   }
 
-  async function transitionBookingLifecycle(
-    bookingId: string,
-    decision: BookingLifecycle
-  ) {
+  async function transitionBookingLifecycle(bookingId: string, decision: BookingLifecycle) {
     const res = await fetch(`/api/approvals/${bookingId}`, {
       method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        "x-demo-role": role,
-      },
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
       body: JSON.stringify({ decision }),
     });
 
@@ -419,10 +491,8 @@ export default function LabLinkConsole() {
   async function toggleMaintenanceLock(equipmentId: string, nextLock: boolean) {
     const res = await fetch("/api/equipment", {
       method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        "x-demo-role": role,
-      },
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
       body: JSON.stringify({ equipmentId, maintenanceLock: nextLock }),
     });
     const data = await res.json();
@@ -439,14 +509,56 @@ export default function LabLinkConsole() {
     }
   }
 
-
   const openBenchesCount = equipment.filter((e) => !e.maintenanceLock).length;
   const pendingApprovalsCount = bookings.filter((b) => b.status === "PENDING_FACULTY").length;
   const checkedOutCount = bookings.filter((b) => b.status === "CHECKED_OUT").length;
 
   return (
     <div className="min-h-screen flex flex-col lab-grid-bg text-[#090D16]">
-      {/* Precision Top Navigation Bar */}
+      {/* Explicit Sandbox Evaluator Role Switcher Strip (Signed HttpOnly RBAC Cookie) */}
+      <div
+        role="region"
+        aria-label="Sandbox Evaluator Persona Switcher"
+        className="bg-[#090D16] text-[#F8FAFC] border-b border-white/10"
+      >
+        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-2 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <span className="font-mono-tech text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-[4px] bg-[#2CBEF1]/15 text-[#2CBEF1] border border-[#2CBEF1]/30">
+              SANDBOX EVALUATOR MODE
+            </span>
+            <span className="text-xs text-slate-300 hidden sm:inline">
+              Zero-login evaluation session • Switches signed <code className="font-mono-tech text-[#A2FA8F]">HttpOnly</code> RBAC cookie:
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {(["STUDENT", "FACULTY", "LAB_ADMIN"] as Role[]).map((personaKey) => {
+              const isActive = role === personaKey;
+              return (
+                <button
+                  key={personaKey}
+                  type="button"
+                  disabled={switchingRole}
+                  aria-pressed={isActive}
+                  onClick={() => handleSandboxRoleSwitch(personaKey)}
+                  className={`font-mono-tech text-[11px] font-semibold px-2.5 py-1 rounded-[4px] border transition ${
+                    isActive
+                      ? "bg-[#A2FA8F] text-[#090D16] border-[#A2FA8F]"
+                      : "bg-white/5 text-slate-200 border-white/15 hover:border-[#2CBEF1]"
+                  }`}
+                >
+                  {SANDBOX_PERSONAS[personaKey].badge}
+                  {personaKey === "FACULTY" && pendingApprovalsCount > 0
+                    ? ` (${pendingApprovalsCount})`
+                    : ""}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Scoped Active Persona Header */}
       <header className="sticky top-0 z-30 border-b border-[#E2E8F0] bg-[#FFFFFF]">
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -458,40 +570,21 @@ export default function LabLinkConsole() {
             </div>
             <span className="font-display font-bold text-base text-[#090D16]">LabLink</span>
             <span className="hidden md:inline-block font-mono-tech text-[11px] px-2 py-0.5 rounded-[4px] bg-[#F4F7FB] text-[#014BBE] border border-[#E2E8F0]">
-              CAMPUS-LAB-CONSOLE v2.4
+              {SANDBOX_PERSONAS[role].workspaceTitle}
             </span>
           </div>
 
-          <nav
-            aria-label="Role View Switcher"
-            className="flex items-center gap-1 bg-[#F4F7FB] p-1 rounded-[6px] border border-[#E2E8F0]"
-          >
-            {(
-              [
-                { key: "STUDENT", label: "Student Workbench" },
-                { key: "FACULTY", label: `Faculty Approvals (${pendingApprovalsCount})` },
-                { key: "LAB_ADMIN", label: "Handover & Telemetry" },
-              ] as const
-            ).map((tab) => (
-              <button
-                key={tab.key}
-                type="button"
-                aria-pressed={role === tab.key}
-                onClick={() => setRole(tab.key)}
-                className={`px-3 py-1 rounded-[5px] text-xs font-semibold transition ${
-                  role === tab.key
-                    ? "bg-[#014BBE] text-[#F8FAFC]"
-                    : "text-[#090D16]/75 hover:text-[#090D16]"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </nav>
+          <div className="flex items-center gap-2 font-mono-tech text-xs bg-[#F4F7FB] px-3 py-1.5 rounded-[6px] border border-[#E2E8F0]">
+            <UserCheck className="w-3.5 h-3.5 text-[#014BBE]" aria-hidden="true" />
+            <span className="font-semibold text-[#090D16]">{SANDBOX_PERSONAS[role].fullName}</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded-[4px] bg-[#014BBE] text-[#F8FAFC]">
+              {role}
+            </span>
+          </div>
         </div>
       </header>
 
-      {/* Compact Live Campus Telemetry & Conflict Trigger Strip (Replaces Generic Marketing Hero) */}
+      {/* Compact Live Campus Telemetry & Conflict Trigger Strip */}
       <section
         aria-label="Live Campus Lab Status"
         className="bg-[#014BBE] text-[#F8FAFC] border-b border-[#090D16]/15"
@@ -518,7 +611,7 @@ export default function LabLinkConsole() {
             <div className="h-7 w-px bg-white/15 hidden sm:block" />
             <div>
               <span className="font-mono-tech text-[10px] uppercase tracking-wider text-[#2CBEF1] block">
-                YOUR 30-DAY EQUITY QUOTA
+                30-DAY EQUITY QUOTA
               </span>
               <div className="flex items-center gap-2 mt-0.5">
                 <div className="w-24 h-2 rounded-[3px] bg-[#090D16]/40 overflow-hidden">
@@ -575,7 +668,6 @@ export default function LabLinkConsole() {
           <>
             {/* Top Utility Bar: Smart "Match My Project" Bundle Recommender + Active Project Selector */}
             <div className="grid lg:grid-cols-12 gap-4">
-              {/* Smart Match My Project */}
               <form
                 onSubmit={runSmartProjectMatcher}
                 className="lg:col-span-7 bg-[#FFFFFF] border border-[#E2E8F0] rounded-[8px] p-4 flex flex-col justify-between gap-3"
@@ -624,7 +716,6 @@ export default function LabLinkConsole() {
                 )}
               </form>
 
-              {/* Active Project Workspace & Collaborator Tagging */}
               <div className="lg:col-span-5 bg-[#FFFFFF] border border-[#E2E8F0] rounded-[8px] p-4 space-y-2.5">
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-display font-bold text-sm text-[#090D16] flex items-center gap-1.5">
@@ -737,7 +828,6 @@ export default function LabLinkConsole() {
 
             {/* MASTER-DETAIL SPLIT WORKSPACE */}
             <div className="grid lg:grid-cols-12 gap-5 items-start">
-              {/* LEFT PANE (7 Cols): Equipment Rows with Interactive 09:00–19:00 Hourly Slot Timeline Matrix */}
               <section aria-label="Laboratory Equipment Schedule Matrix" className="lg:col-span-7 space-y-3">
                 <div className="flex items-center justify-between text-[11px] font-mono-tech text-slate-500 px-1">
                   <span>SELECT A BENCH &amp; CLICK ANY HOURLY BLOCK (09:00 – 19:00)</span>
@@ -801,7 +891,6 @@ export default function LabLinkConsole() {
 
                         <p className="font-mono-tech text-[11px] text-slate-600 mt-1">{item.specs}</p>
 
-                        {/* Interactive 10-Hour Gantt Slot Timeline (09:00 to 19:00) */}
                         <div className="mt-3 pt-3 border-t border-[#E2E8F0]">
                           <div className="grid grid-cols-10 gap-1">
                             {HOURS.map((hr) => {
@@ -852,7 +941,6 @@ export default function LabLinkConsole() {
                 )}
               </section>
 
-              {/* RIGHT PANE (5 Cols): Docked Hardware Inspection & 1-Click Booking Workbench */}
               <aside
                 aria-label="Selected Hardware Inspection & Booking Panel"
                 className="lg:col-span-5 lg:sticky lg:top-20 bg-[#FFFFFF] border border-[#E2E8F0] rounded-[8px] p-5 space-y-4"
@@ -890,7 +978,6 @@ export default function LabLinkConsole() {
                       </div>
                     </div>
 
-                    {/* 1-Click Timeline Reservation Controls */}
                     <div className="border-t border-[#E2E8F0] pt-4 space-y-3">
                       <div className="flex items-center justify-between">
                         <span className="font-display font-bold text-sm text-[#090D16]">
@@ -1121,7 +1208,6 @@ export default function LabLinkConsole() {
               </span>
             </div>
 
-            {/* Maintenance / Calibration Lock Control Table */}
             <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-[8px] overflow-hidden">
               <div className="px-5 py-3.5 border-b border-[#E2E8F0] flex items-center justify-between">
                 <h3 className="font-display text-sm font-bold text-[#090D16] flex items-center gap-2">
@@ -1163,7 +1249,6 @@ export default function LabLinkConsole() {
               </div>
             </div>
 
-            {/* Physical Handover Ledger */}
             <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-[8px] p-5 space-y-3">
               <h3 className="font-display text-sm font-bold text-[#090D16]">
                 Physical Check-Out / Check-In Handover Ledger
@@ -1393,3 +1478,5 @@ export default function LabLinkConsole() {
     </div>
   );
 }
+
+

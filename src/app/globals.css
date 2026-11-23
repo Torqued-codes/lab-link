@@ -12,6 +12,7 @@
 }
 
 html {
+  font-size: 18px;
   scroll-behavior: smooth;
 }
 
@@ -19,7 +20,7 @@ body {
   background-color: var(--canvas-tint);
   color: var(--obsidian-ink);
   font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
-  line-height: 1.45;
+  line-height: 1.5;
 }
 
 .lab-grid-bg {
@@ -59,7 +60,6 @@ h1, h2, h3, .font-display {
   border: 1px solid rgba(9, 13, 22, 0.16);
   transition: background-color 0.15s ease;
 }
-
 .cta-paradise:hover:not(:disabled) {
   background-color: #90f27b;
 }
