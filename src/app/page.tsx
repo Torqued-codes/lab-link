@@ -133,6 +133,7 @@ export default function LabLinkConsole() {
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
   const [loadingData, setLoadingData] = useState(true);
 
+  // Filters & Natural-Language AI Concierge
   const [searchQuery, setSearchQuery] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("ALL");
   const [smartPrompt, setSmartPrompt] = useState("");
@@ -140,11 +141,13 @@ export default function LabLinkConsole() {
   const [recommendedBundleIds, setRecommendedBundleIds] = useState<string[]>([]);
   const [bundleSummary, setBundleSummary] = useState<string | null>(null);
 
+  // Master-Detail Selected Equipment & Slot Range
   const [selectedEquipmentId, setSelectedEquipmentId] = useState<string | null>(null);
   const [selectedStartHour, setSelectedStartHour] = useState<number>(10);
   const [selectedDuration, setSelectedDuration] = useState<number>(2);
   const [submittingBooking, setSubmittingBooking] = useState(false);
 
+  // Multi-Project Workspace & Collaborator Tagging
   const [projects, setProjects] = useState<StudentProject[]>(INITIAL_PROJECTS);
   const [activeProjectId, setActiveProjectId] = useState<string>(INITIAL_PROJECTS[0].id);
   const [collabInput, setCollabInput] = useState("");
@@ -154,10 +157,12 @@ export default function LabLinkConsole() {
   const [newProjDeadline, setNewProjDeadline] = useState("2026-11-28");
   const [newProjAbstract, setNewProjAbstract] = useState("");
 
+  // Faculty AI Pre-Audit cache per booking ID
   const [facultyAudits, setFacultyAudits] = useState<
     Record<string, { verdict: string; summary: string; loading?: boolean }>
   >({});
 
+  // GenAI Conflict Resolution Modal
   const [conflictModalOpen, setConflictModalOpen] = useState(false);
   const [conflictEquipment, setConflictEquipment] = useState<EquipmentItem | null>(null);
   const [conflictHourLabel, setConflictHourLabel] = useState("14:00 - 17:00");
@@ -297,6 +302,7 @@ export default function LabLinkConsole() {
   }, [bookings]);
   const monthlyQuotaLimit = 12.0;
 
+  // Department telemetry breakdown for Lab Admin console
   const departmentTelemetry = useMemo(() => {
     const depts = ["CSE", "Robotics", "ECE", "Mechanical"];
     return depts.map((dept) => {
@@ -924,7 +930,7 @@ export default function LabLinkConsole() {
                   equipment.map((item) => {
                     const isSelected = selectedEquipment?.id === item.id;
                     const isBundleMatch = recommendedBundleIds.includes(item.id);
-                    const previewUrl = getEquipmentPreviewSvg(item.id, item.name, item.department);
+                    const previewUrl = getEquipmentPreviewImage(item.id, item.name, item.department);
 
                     return (
                       <article
@@ -940,8 +946,8 @@ export default function LabLinkConsole() {
                           <div className="flex items-start gap-3">
                             <img
                               src={previewUrl}
-                              alt={`${item.name} schematic preview`}
-                              className="w-24 h-12 object-cover rounded-[5px] border border-[#E2E8F0] shrink-0 hidden sm:block"
+                              alt={item.name}
+                              className="w-28 h-16 object-cover rounded-[5px] border border-[#E2E8F0] bg-[#090D16] shrink-0 hidden sm:block"
                             />
                             <div>
                               <div className="flex flex-wrap items-center gap-2">
@@ -1028,13 +1034,13 @@ export default function LabLinkConsole() {
                   <>
                     <div className="border-b border-[#E2E8F0] pb-3.5 space-y-2.5">
                       <img
-                        src={getEquipmentPreviewSvg(
+                        src={getEquipmentPreviewImage(
                           selectedEquipment.id,
                           selectedEquipment.name,
                           selectedEquipment.department
                         )}
-                        alt={`${selectedEquipment.name} hardware inspection diagram`}
-                        className="w-full h-32 object-cover rounded-[6px] border border-[#E2E8F0]"
+                        alt={selectedEquipment.name}
+                        className="w-full h-44 object-cover rounded-[6px] border border-[#E2E8F0] bg-[#090D16]"
                       />
                       <div className="flex items-center justify-between">
                         <span className="font-mono-tech text-[11px] font-semibold text-[#014BBE]">
@@ -1613,7 +1619,3 @@ export default function LabLinkConsole() {
     </div>
   );
 }
-
-
-
-
