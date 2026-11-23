@@ -1,91 +1,38 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   Cpu,
-  ShieldCheck,
   CheckCircle2,
   AlertTriangle,
-  BarChart3,
   ArrowRight,
   Clock,
   X,
-  Lock,
-  Wrench,
   Users,
   FolderKanban,
   Search,
-  PackageCheck,
-  RotateCcw,
   Plus,
   UserCheck,
   Sparkles,
-  FileCheck2,
 } from "lucide-react";
 import { getEquipmentPreviewImage } from "@/lib/equipment-media";
-
-type Role = "STUDENT" | "FACULTY" | "LAB_ADMIN";
-type SlotState = "OPEN" | "BOOKED" | "MAINTENANCE";
-type BookingLifecycle = "PENDING_FACULTY" | "APPROVED" | "REJECTED" | "CHECKED_OUT" | "RETURNED";
-
-export interface EquipmentItem {
-  id: string;
-  name: string;
-  department: string;
-  labRoom: string;
-  bayCode: string;
-  specs: string;
-  tags: string[];
-  safetyPrereq: string;
-  requiresApproval: boolean;
-  maintenanceLock: boolean;
-  utilizationPct: number;
-  hourlySlots: Record<number, SlotState>;
-}
-
-export interface BookingRecord {
-  id: string;
-  equipmentId: string;
-  equipmentName: string;
-  studentName: string;
-  collaborators: string[];
-  projectId: string;
-  projectTitle: string;
-  projectDeadline: string;
-  slotLabel: string;
-  startHour: number;
-  endHour: number;
-  status: BookingLifecycle;
-  aiRationale?: string;
-}
-
-interface StudentProject {
-  id: string;
-  title: string;
-  category: "Capstone" | "Hackathon" | "Course Lab";
-  deadline: string;
-  abstract: string;
-  collaborators: string[];
-}
-
-interface AiRecommendation {
-  optionTitle: string;
-  targetEquipmentId: string;
-  suggestedSlot: string;
-  startHour: number;
-  endHour: number;
-  actionType: "SWITCH_LAB_UNIT" | "SHIFT_TIME_SLOT" | "SPLIT_SESSION";
-  fairnessScore: number;
-  reasoning: string;
-}
-
-interface AiResolution {
-  priorityWinner: string;
-  fairnessSummary: string;
-  recommendations: AiRecommendation[];
-}
+import { FacultyQueue } from "@/components/FacultyQueue";
+import { LabAdminConsole } from "@/components/LabAdminConsole";
+import { ConflictResolverModal } from "@/components/ConflictResolverModal";
+import type {
+  Role,
+  SlotState,
+  BookingLifecycle,
+  EquipmentItem,
+  BookingRecord,
+  StudentProject,
+  AiResolution,
+  AiRecommendation,
+} from "@/types/lablink";
 
 const HOURS = [9, 10, 11, 12, 13, 14, 15, 16, 17, 18];
+const LAB_END_HOUR = 19;
+const TODAY_ISO = "2026-11-23";
 
 const SANDBOX_PERSONAS: Record<Role, { badge: string; fullName: string; workspaceTitle: string }> = {
   STUDENT: {
@@ -133,21 +80,22 @@ export default function LabLinkConsole() {
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
   const [loadingData, setLoadingData] = useState(true);
 
-  // Filters & Natural-Language AI Concierge
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("ALL");
   const [smartPrompt, setSmartPrompt] = useState("");
   const [conciergeLoading, setConciergeLoading] = useState(false);
   const [recommendedBundleIds, setRecommendedBundleIds] = useState<string[]>([]);
   const [bundleSummary, setBundleSummary] = useState<string | null>(null);
 
-  // Master-Detail Selected Equipment & Slot Range
   const [selectedEquipmentId, setSelectedEquipmentId] = useState<string | null>(null);
+  const selectedEquipmentIdRef = useRef<string | null>(null);
+  selectedEquipmentIdRef.current = selectedEquipmentId;
+
   const [selectedStartHour, setSelectedStartHour] = useState<number>(10);
   const [selectedDuration, setSelectedDuration] = useState<number>(2);
   const [submittingBooking, setSubmittingBooking] = useState(false);
 
-  // Multi-Project Workspace & Collaborator Tagging
   const [projects, setProjects] = useState<StudentProject[]>(INITIAL_PROJECTS);
   const [activeProjectId, setActiveProjectId] = useState<string>(INITIAL_PROJECTS[0].id);
   const [collabInput, setCollabInput] = useState("");
@@ -157,15 +105,13 @@ export default function LabLinkConsole() {
   const [newProjDeadline, setNewProjDeadline] = useState("2026-11-28");
   const [newProjAbstract, setNewProjAbstract] = useState("");
 
-  // Faculty AI Pre-Audit cache per booking ID
   const [facultyAudits, setFacultyAudits] = useState<
     Record<string, { verdict: string; summary: string; loading?: boolean }>
   >({});
 
-  // GenAI Conflict Resolution Modal
   const [conflictModalOpen, setConflictModalOpen] = useState(false);
   const [conflictEquipment, setConflictEquipment] = useState<EquipmentItem | null>(null);
-  const [conflictHourLabel, setConflictHourLabel] = useState("14:00 - 17:00");
+  const [conflictHourLabel, setConflictHourLabel] = useState("14:00 - 16:00");
   const [aiLoading, setAiLoading] = useState(false);
   const [aiPlan, setAiPlan] = useState<AiResolution | null>(null);
 
@@ -174,6 +120,11 @@ export default function LabLinkConsole() {
   const notify = useCallback((type: "success" | "warn", text: string) => {
     setStatusMessage({ type, text });
   }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery.trim()), 200);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   useEffect(() => {
     if (!statusMessage) return;
@@ -255,7 +206,7 @@ export default function LabLinkConsole() {
     setLoadingData(true);
     try {
       const params = new URLSearchParams();
-      if (searchQuery.trim()) params.set("q", searchQuery.trim());
+      if (debouncedSearch) params.set("q", debouncedSearch);
       if (departmentFilter !== "ALL") params.set("department", departmentFilter);
 
       const [eqRes, bkRes] = await Promise.all([
@@ -267,7 +218,7 @@ export default function LabLinkConsole() {
         const eqJson = await eqRes.json();
         const list: EquipmentItem[] = eqJson.equipment ?? [];
         setEquipment(list);
-        if (list.length > 0 && !selectedEquipmentId) {
+        if (list.length > 0 && !selectedEquipmentIdRef.current) {
           setSelectedEquipmentId(list[0].id);
         }
       }
@@ -278,7 +229,7 @@ export default function LabLinkConsole() {
     } finally {
       setLoadingData(false);
     }
-  }, [sessionReady, searchQuery, departmentFilter, role, selectedEquipmentId]);
+  }, [sessionReady, debouncedSearch, departmentFilter]);
 
   useEffect(() => {
     fetchPlatformData();
@@ -294,6 +245,10 @@ export default function LabLinkConsole() {
     [equipment, selectedEquipmentId]
   );
 
+  const maxAllowedDuration = Math.max(1, LAB_END_HOUR - selectedStartHour);
+  const effectiveDuration = Math.min(selectedDuration, maxAllowedDuration);
+  const computedEndHour = selectedStartHour + effectiveDuration;
+
   const monthlyUsedHours = useMemo(() => {
     const added = bookings
       .filter((b) => b.status !== "REJECTED")
@@ -301,20 +256,6 @@ export default function LabLinkConsole() {
     return Number((1.5 + added).toFixed(1));
   }, [bookings]);
   const monthlyQuotaLimit = 12.0;
-
-  // Department telemetry breakdown for Lab Admin console
-  const departmentTelemetry = useMemo(() => {
-    const depts = ["CSE", "Robotics", "ECE", "Mechanical"];
-    return depts.map((dept) => {
-      const items = equipment.filter((e) => e.department === dept);
-      const avgUtil =
-        items.length > 0
-          ? Math.round(items.reduce((acc, i) => acc + i.utilizationPct, 0) / items.length)
-          : 0;
-      const locked = items.filter((i) => i.maintenanceLock).length;
-      return { dept, count: items.length, avgUtil, locked };
-    });
-  }, [equipment]);
 
   async function runAiLabConcierge(e: React.FormEvent) {
     e.preventDefault();
@@ -331,7 +272,7 @@ export default function LabLinkConsole() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
-        body: JSON.stringify({ prompt: text }),
+        body: JSON.stringify({ prompt: text, referenceDate: TODAY_ISO }),
       });
 
       const data = await res.json();
@@ -368,6 +309,7 @@ export default function LabLinkConsole() {
           projectTitle: bk.projectTitle,
           projectDeadline: bk.projectDeadline,
           slotLabel: bk.slotLabel,
+          referenceDate: TODAY_ISO,
         }),
       });
       const data = await res.json();
@@ -432,7 +374,8 @@ export default function LabLinkConsole() {
 
   async function triggerAiConflictResolver(item: EquipmentItem, clashHour = 14) {
     setConflictEquipment(item);
-    const windowStr = `${String(clashHour).padStart(2, "0")}:00 - ${String(clashHour + 2).padStart(2, "0")}:00`;
+    const endClash = Math.min(LAB_END_HOUR, clashHour + 2);
+    const windowStr = `${String(clashHour).padStart(2, "0")}:00 - ${String(endClash).padStart(2, "0")}:00`;
     setConflictHourLabel(windowStr);
     setConflictModalOpen(true);
     setAiLoading(true);
@@ -443,14 +386,15 @@ export default function LabLinkConsole() {
         .filter((e) => e.id !== item.id && !e.maintenanceLock)
         .map((e) => {
           const openHr = HOURS.find((h) => e.hourlySlots[h] === "OPEN") ?? 11;
+          const openEnd = Math.min(LAB_END_HOUR, openHr + 2);
           return {
             id: e.id,
             name: e.name,
             specs: e.specs,
             labRoom: `${e.labRoom} (${e.bayCode})`,
-            nextFreeSlot: `Today, ${String(openHr).padStart(2, "0")}:00 - ${String(openHr + 2).padStart(2, "0")}:00`,
+            nextFreeSlot: `Today, ${String(openHr).padStart(2, "0")}:00 - ${String(openEnd).padStart(2, "0")}:00`,
             startHour: openHr,
-            endHour: openHr + 2,
+            endHour: openEnd,
           };
         });
 
@@ -459,6 +403,7 @@ export default function LabLinkConsole() {
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
         body: JSON.stringify({
+          referenceDate: TODAY_ISO,
           requestedEquipment: {
             id: item.id,
             name: item.name,
@@ -476,7 +421,7 @@ export default function LabLinkConsole() {
             deadlineIso: new Date(Date.now() + 86400000).toISOString(),
             studentUsageHours: 9.5,
             startTime: `${String(clashHour).padStart(2, "0")}:00`,
-            endTime: `${String(clashHour + 2).padStart(2, "0")}:00`,
+            endTime: `${String(endClash).padStart(2, "0")}:00`,
           },
           alternativeEquipment: alternatives,
         }),
@@ -588,7 +533,6 @@ export default function LabLinkConsole() {
 
   return (
     <div className="min-h-screen flex flex-col lab-grid-bg text-[#090D16]">
-      {/* Explicit Sandbox Evaluator Role Switcher Strip */}
       <div
         role="region"
         aria-label="Sandbox Evaluator Persona Switcher"
@@ -631,7 +575,6 @@ export default function LabLinkConsole() {
         </div>
       </div>
 
-      {/* Scoped Active Persona Header */}
       <header className="sticky top-0 z-30 border-b border-[#E2E8F0] bg-[#FFFFFF]">
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -657,7 +600,6 @@ export default function LabLinkConsole() {
         </div>
       </header>
 
-      {/* Compact Live Campus Telemetry & Conflict Trigger Strip */}
       <section
         aria-label="Live Campus Lab Status"
         className="bg-[#014BBE] text-[#F8FAFC] border-b border-[#090D16]/15"
@@ -714,7 +656,6 @@ export default function LabLinkConsole() {
         </div>
       </section>
 
-      {/* Accessible Live Toast Banner */}
       <div aria-live="polite" className="fixed bottom-4 right-4 z-50">
         {statusMessage && (
           <div
@@ -735,11 +676,9 @@ export default function LabLinkConsole() {
         )}
       </div>
 
-      {/* Main Workspace */}
       <main id="main-content" className="max-w-[1400px] mx-auto w-full px-4 sm:px-6 py-6 flex-1 space-y-6">
         {role === "STUDENT" && (
           <>
-            {/* Top Utility Bar: Natural-Language Ask LabLink AI Concierge + Active Project Selector */}
             <div className="grid lg:grid-cols-12 gap-4">
               <form
                 onSubmit={runAiLabConcierge}
@@ -805,28 +744,26 @@ export default function LabLinkConsole() {
                     onClick={() => setNewProjModalOpen(true)}
                     className="font-mono-tech text-[11px] font-semibold px-2 py-0.5 rounded-[4px] bg-[#F4F7FB] border border-[#E2E8F0] text-[#014BBE] hover:border-[#014BBE] flex items-center gap-1"
                   >
-                    <Plus className="w-3 h-3" /> New Project
+                    <Plus className="w-3 h-3" aria-hidden="true" /> New Project
                   </button>
                 </div>
 
-                <div className="flex gap-2">
-                  <select
-                    aria-label="Select Active Project Workspace"
-                    value={activeProject.id}
-                    onChange={(e) => setActiveProjectId(e.target.value)}
-                    className="flex-1 bg-[#F4F7FB] border border-[#E2E8F0] rounded-[6px] px-2.5 py-1.5 text-xs font-semibold text-[#090D16]"
-                  >
-                    {projects.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        [{p.category}] {p.title} (Due {p.deadline})
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <select
+                  aria-label="Select Active Project Workspace"
+                  value={activeProject.id}
+                  onChange={(e) => setActiveProjectId(e.target.value)}
+                  className="w-full bg-[#F4F7FB] border border-[#E2E8F0] rounded-[6px] px-2.5 py-1.5 text-xs font-semibold text-[#090D16]"
+                >
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      [{p.category}] {p.title} (Due {p.deadline})
+                    </option>
+                  ))}
+                </select>
 
                 <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
                   <span className="font-mono-tech text-[10px] text-slate-500 flex items-center gap-1">
-                    <Users className="w-3 h-3" /> TEAM:
+                    <Users className="w-3 h-3" aria-hidden="true" /> TEAM:
                   </span>
                   {activeProject.collaborators.map((roll) => (
                     <span
@@ -871,7 +808,6 @@ export default function LabLinkConsole() {
               </div>
             </div>
 
-            {/* Department & Keyword Filter Controls */}
             <div className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center justify-between">
               <div className="relative flex-1 max-w-md">
                 <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" aria-hidden="true" />
@@ -904,7 +840,6 @@ export default function LabLinkConsole() {
               </div>
             </div>
 
-            {/* MASTER-DETAIL SPLIT WORKSPACE */}
             <div className="grid lg:grid-cols-12 gap-5 items-start">
               <section aria-label="Laboratory Equipment Schedule Matrix" className="lg:col-span-7 space-y-3">
                 <div className="flex items-center justify-between text-[11px] font-mono-tech text-slate-500 px-1">
@@ -947,6 +882,8 @@ export default function LabLinkConsole() {
                             <img
                               src={previewUrl}
                               alt={item.name}
+                              loading="lazy"
+                              decoding="async"
                               className="w-28 h-20 object-contain rounded-[5px] border border-[#E2E8F0] shrink-0 hidden sm:block"
                             />
                             <div>
@@ -986,7 +923,7 @@ export default function LabLinkConsole() {
                                 isSelected &&
                                 state === "OPEN" &&
                                 hr >= selectedStartHour &&
-                                hr < selectedStartHour + selectedDuration;
+                                hr < computedEndHour;
 
                               return (
                                 <button
@@ -1040,6 +977,8 @@ export default function LabLinkConsole() {
                           selectedEquipment.department
                         )}
                         alt={selectedEquipment.name}
+                        loading="lazy"
+                        decoding="async"
                         className="w-full h-auto max-h-60 object-contain rounded-[6px] border border-[#E2E8F0]"
                       />
                       <div className="flex items-center justify-between">
@@ -1079,7 +1018,7 @@ export default function LabLinkConsole() {
                         </span>
                         <span className="font-mono-tech text-xs font-semibold text-[#014BBE]">
                           {String(selectedStartHour).padStart(2, "0")}:00 –{" "}
-                          {String(Math.min(19, selectedStartHour + selectedDuration)).padStart(2, "0")}:00
+                          {String(computedEndHour).padStart(2, "0")}:00
                         </span>
                       </div>
 
@@ -1104,20 +1043,21 @@ export default function LabLinkConsole() {
 
                         <div>
                           <label htmlFor="inspect-dur" className="block font-mono-tech text-[10px] text-slate-500 mb-1">
-                            DURATION (UP TO 8H)
+                            DURATION (MAX {maxAllowedDuration}H)
                           </label>
                           <select
                             id="inspect-dur"
-                            value={selectedDuration}
+                            value={effectiveDuration}
                             onChange={(e) => setSelectedDuration(Number(e.target.value))}
                             className="font-mono-tech w-full bg-[#F4F7FB] border border-[#E2E8F0] rounded-[6px] px-2.5 py-1.5 text-xs text-[#090D16]"
                           >
-                            <option value={1}>1 Hour</option>
-                            <option value={2}>2 Hours</option>
-                            <option value={3}>3 Hours</option>
-                            <option value={4}>4 Hours (Half-Day)</option>
-                            <option value={6}>6 Hours (Extended Run)</option>
-                            <option value={8}>8 Hours (Full Lab Day)</option>
+                            {[1, 2, 3, 4, 6, 8]
+                              .filter((d) => d <= maxAllowedDuration)
+                              .map((d) => (
+                                <option key={d} value={d}>
+                                  {d} {d === 1 ? "Hour" : "Hours"}
+                                </option>
+                              ))}
                           </select>
                         </div>
                       </div>
@@ -1147,7 +1087,7 @@ export default function LabLinkConsole() {
                             submitBookingRequest(
                               selectedEquipment.id,
                               selectedStartHour,
-                              Math.min(19, selectedStartHour + selectedDuration)
+                              computedEndHour
                             )
                           }
                           className="cta-paradise w-full py-2.5 px-4 rounded-[6px] font-semibold text-xs flex items-center justify-center gap-2"
@@ -1163,7 +1103,6 @@ export default function LabLinkConsole() {
               </aside>
             </div>
 
-            {/* Active Student Reservations Ledger */}
             <section aria-label="My Project Reservations" className="space-y-2.5 pt-2">
               <h2 className="font-display text-base font-bold text-[#090D16]">
                 Active Project Reservations &amp; Handover Status
@@ -1204,242 +1143,26 @@ export default function LabLinkConsole() {
           </>
         )}
 
-        {/* FACULTY APPROVAL & AI PRE-AUDIT QUEUE */}
         {role === "FACULTY" && (
-          <section aria-label="Faculty Mentor Approval & Handover Queue" className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="font-display text-xl font-bold text-[#090D16] flex items-center gap-2">
-                <ShieldCheck className="w-5 h-5 text-[#014BBE]" aria-hidden="true" />
-                Faculty Mentor Approval &amp; Hardware Handover Queue
-              </h2>
-              <span className="font-mono-tech text-[11px] px-2.5 py-1 rounded-[4px] bg-[#FFFFFF] border border-[#E2E8F0] text-slate-600">
-                STATE_MACHINE: PENDING → APPROVED → CHECKED_OUT → RETURNED
-              </span>
-            </div>
-
-            <div className="space-y-3">
-              {bookings.map((bk) => {
-                const audit = facultyAudits[bk.id];
-                return (
-                  <article
-                    key={bk.id}
-                    className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-[8px] p-5 flex flex-col md:flex-row md:items-center justify-between gap-4"
-                  >
-                    <div className="space-y-1.5 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="font-display font-bold text-base text-[#090D16]">
-                          {bk.projectTitle}
-                        </h3>
-                        <span className="font-mono-tech text-[11px] font-semibold px-2 py-0.5 rounded-[4px] bg-[#014BBE] text-[#F8FAFC]">
-                          DUE: {bk.projectDeadline}
-                        </span>
-                        <span className="font-mono-tech text-[11px] font-semibold px-2 py-0.5 rounded-[4px] bg-[#F4F7FB] border border-[#E2E8F0] text-[#090D16]">
-                          {bk.status}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-700">
-                        Lead: <strong>{bk.studentName}</strong> • Team:{" "}
-                        <span className="font-mono-tech">{bk.collaborators.join(", ")}</span> • Hardware:{" "}
-                        <strong>{bk.equipmentName}</strong>
-                      </p>
-                      <p className="font-mono-tech text-xs text-[#014BBE]">WINDOW: {bk.slotLabel}</p>
-                      {bk.aiRationale && (
-                        <p className="font-mono-tech text-[11px] text-[#090D16] bg-[#F4F7FB] px-3 py-1.5 rounded-[4px] border border-[#E2E8F0]">
-                          ALLOCATION_NOTE: {bk.aiRationale}
-                        </p>
-                      )}
-                      {audit && (
-                        <div className="bg-[#090D16] text-[#F8FAFC] rounded-[6px] p-3 text-xs space-y-1">
-                          <span className="font-mono-tech text-[10px] font-semibold text-[#A2FA8F] uppercase">
-                            AI MENTOR READINESS &amp; RIGHT-SIZING AUDIT • {audit.verdict}
-                          </span>
-                          <p className="text-slate-200">{audit.summary}</p>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2 shrink-0">
-                      <button
-                        type="button"
-                        disabled={audit?.loading}
-                        onClick={() => runFacultyAiAudit(bk)}
-                        className="px-3 py-2 rounded-[6px] text-xs font-semibold bg-[#F4F7FB] text-[#014BBE] border border-[#014BBE]/30 hover:border-[#014BBE] flex items-center gap-1.5"
-                      >
-                        <FileCheck2 className="w-3.5 h-3.5" />
-                        {audit?.loading ? "Auditing..." : "AI Pre-Audit"}
-                      </button>
-
-                      {bk.status === "PENDING_FACULTY" && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => transitionBookingLifecycle(bk.id, "APPROVED")}
-                            className="cta-paradise px-3.5 py-2 rounded-[6px] text-xs font-semibold"
-                          >
-                            Approve Slot
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => transitionBookingLifecycle(bk.id, "REJECTED")}
-                            className="px-3.5 py-2 rounded-[6px] text-xs font-semibold bg-[#F4F7FB] text-[#090D16] border border-[#E2E8F0] hover:bg-red-50 hover:border-red-300"
-                          >
-                            Reject
-                          </button>
-                        </>
-                      )}
-                      {bk.status === "APPROVED" && (
-                        <button
-                          type="button"
-                          onClick={() => transitionBookingLifecycle(bk.id, "CHECKED_OUT")}
-                          className="cta-paradise px-3.5 py-2 rounded-[6px] text-xs font-semibold flex items-center gap-1.5"
-                        >
-                          <PackageCheck className="w-4 h-4" /> Issue Hardware (Check-Out)
-                        </button>
-                      )}
-                      {bk.status === "CHECKED_OUT" && (
-                        <button
-                          type="button"
-                          onClick={() => transitionBookingLifecycle(bk.id, "RETURNED")}
-                          className="px-3.5 py-2 rounded-[6px] text-xs font-semibold bg-[#014BBE] text-[#F8FAFC] flex items-center gap-1.5"
-                        >
-                          <RotateCcw className="w-4 h-4" /> Log Inspection &amp; Check-In
-                        </button>
-                      )}
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          </section>
+          <FacultyQueue
+            bookings={bookings}
+            facultyAudits={facultyAudits}
+            onRunAudit={runFacultyAiAudit}
+            onTransition={transitionBookingLifecycle}
+          />
         )}
 
-        {/* LAB ADMIN HANDOVER LEDGER, MAINTENANCE LOCKS & TELEMETRY */}
         {role === "LAB_ADMIN" && (
-          <section aria-label="Lab Admin Handover Ledger & Maintenance Controls" className="space-y-5">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="font-display text-xl font-bold text-[#090D16] flex items-center gap-2">
-                <BarChart3 className="w-5 h-5 text-[#014BBE]" aria-hidden="true" />
-                Department Telemetry, Calibration Locks &amp; Handover Ledger
-              </h2>
-              <span className="font-mono-tech text-[11px] px-2.5 py-1 rounded-[4px] bg-[#FFFFFF] border border-[#E2E8F0] text-[#090D16] flex items-center gap-1.5">
-                <Lock className="w-3.5 h-3.5 text-[#014BBE]" /> TOCTOU &amp; RBAC ENFORCED
-              </span>
-            </div>
-
-            {/* Department Utilization Analytics Grid */}
-            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              {departmentTelemetry.map((stat) => (
-                <div
-                  key={stat.dept}
-                  className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-[8px] p-4 space-y-2"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono-tech text-xs font-bold text-[#014BBE]">{stat.dept} LAB</span>
-                    <span className="font-mono-tech text-[11px] text-slate-500">
-                      {stat.count} Units ({stat.locked} Locked)
-                    </span>
-                  </div>
-                  <div className="font-display text-2xl font-bold text-[#090D16]">{stat.avgUtil}%</div>
-                  <div className="w-full h-2 rounded-[3px] bg-[#F4F7FB] overflow-hidden border border-[#E2E8F0]">
-                    <div
-                      className="h-full bg-[#014BBE]"
-                      style={{ width: `${Math.min(100, stat.avgUtil)}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Maintenance / Calibration Lock Control Table */}
-            <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-[8px] overflow-hidden">
-              <div className="px-5 py-3.5 border-b border-[#E2E8F0] flex items-center justify-between">
-                <h3 className="font-display text-sm font-bold text-[#090D16] flex items-center gap-2">
-                  <Wrench className="w-4 h-4 text-[#014BBE]" />
-                  Equipment Inventory &amp; Maintenance Lock Controls
-                </h3>
-              </div>
-              <div className="divide-y divide-[#E2E8F0]">
-                {equipment.map((item) => (
-                  <div
-                    key={item.id}
-                    className="px-5 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-                  >
-                    <div className="space-y-0.5">
-                      <p className="font-semibold text-sm text-[#090D16]">
-                        {item.name}{" "}
-                        <span className="font-mono-tech text-xs text-slate-500">
-                          ({item.labRoom} • {item.bayCode})
-                        </span>
-                      </p>
-                      <p className="font-mono-tech text-[11px] text-slate-600">
-                        Utilization: {item.utilizationPct}% • Status:{" "}
-                        {item.maintenanceLock ? "LOCKED_FOR_CALIBRATION" : "OPERATIONAL"}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => toggleMaintenanceLock(item.id, !item.maintenanceLock)}
-                      className={`px-3.5 py-1.5 rounded-[6px] text-xs font-semibold border transition shrink-0 ${
-                        item.maintenanceLock
-                          ? "cta-paradise"
-                          : "bg-[#F4F7FB] text-[#090D16] border-[#E2E8F0] hover:border-amber-400"
-                      }`}
-                    >
-                      {item.maintenanceLock ? "Release Calibration Lock" : "Engage Maintenance Lock"}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Physical Handover Ledger */}
-            <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-[8px] p-5 space-y-3">
-              <h3 className="font-display text-sm font-bold text-[#090D16]">
-                Physical Check-Out / Check-In Handover Ledger
-              </h3>
-              <div className="space-y-2.5">
-                {bookings.map((bk) => (
-                  <div
-                    key={bk.id}
-                    className="p-3.5 rounded-[6px] bg-[#F4F7FB] border border-[#E2E8F0] flex flex-wrap items-center justify-between gap-3"
-                  >
-                    <div>
-                      <p className="text-xs font-bold text-[#090D16]">
-                        {bk.equipmentName} — <span className="font-normal">{bk.studentName}</span>
-                      </p>
-                      <p className="font-mono-tech text-[11px] text-slate-600">
-                        {bk.slotLabel} • State: <strong>{bk.status}</strong>
-                      </p>
-                    </div>
-                    <div className="flex gap-2">
-                      {bk.status === "APPROVED" && (
-                        <button
-                          type="button"
-                          onClick={() => transitionBookingLifecycle(bk.id, "CHECKED_OUT")}
-                          className="cta-paradise px-3 py-1.5 rounded-[6px] text-xs font-semibold"
-                        >
-                          Mark Checked-Out
-                        </button>
-                      )}
-                      {bk.status === "CHECKED_OUT" && (
-                        <button
-                          type="button"
-                          onClick={() => transitionBookingLifecycle(bk.id, "RETURNED")}
-                          className="px-3 py-1.5 rounded-[6px] text-xs font-semibold bg-[#014BBE] text-[#F8FAFC]"
-                        >
-                          Confirm Returned
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </section>
+          <LabAdminConsole
+            equipment={equipment}
+            bookings={bookings}
+            onToggleLock={toggleMaintenanceLock}
+            onTransition={transitionBookingLifecycle}
+            onNotify={notify}
+          />
         )}
       </main>
 
-      {/* New Project Workspace Modal */}
       {newProjModalOpen && (
         <div
           role="dialog"
@@ -1458,7 +1181,7 @@ export default function LabLinkConsole() {
                 onClick={() => setNewProjModalOpen(false)}
                 className="text-slate-500 hover:text-[#090D16]"
               >
-                <X className="w-4 h-4" />
+                <X className="w-4 h-4" aria-hidden="true" />
               </button>
             </div>
             <form onSubmit={createProjectWorkspace} className="space-y-3">
@@ -1536,89 +1259,24 @@ export default function LabLinkConsole() {
         </div>
       )}
 
-      {/* GenAI Conflict Resolution Modal */}
-      {conflictModalOpen && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="conflict-modal-title"
-          className="fixed inset-0 z-50 bg-[#090D16]/65 flex items-center justify-center p-4"
-        >
-          <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-[8px] max-w-xl w-full p-5 space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-start justify-between gap-3 border-b border-[#E2E8F0] pb-3">
-              <div>
-                <span className="font-mono-tech text-[10px] font-semibold text-[#014BBE] uppercase">
-                  DEADLINE &amp; EQUITY FAIR ALLOCATION ENGINE
-                </span>
-                <h2 id="conflict-modal-title" className="font-display text-lg font-bold text-[#090D16] mt-0.5">
-                  Clash on {conflictEquipment?.name} ({conflictHourLabel})
-                </h2>
-              </div>
-              <button
-                type="button"
-                aria-label="Close conflict resolution dialog"
-                onClick={() => setConflictModalOpen(false)}
-                className="text-slate-500 hover:text-[#090D16] p-1"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {aiLoading ? (
-              <div className="py-10 text-center font-mono-tech text-xs text-[#014BBE]">
-                COMPUTING_FAIRNESS_SCORE_AND_CROSS_LAB_ALTERNATIVES...
-              </div>
-            ) : (
-              aiPlan && (
-                <div className="space-y-3.5">
-                  <div className="text-xs bg-[#F4F7FB] border border-[#E2E8F0] rounded-[6px] p-3 text-[#090D16]">
-                    <strong className="font-semibold text-[#014BBE]">Fairness Assessment:</strong>{" "}
-                    {aiPlan.fairnessSummary}
-                  </div>
-
-                  <div className="space-y-2.5">
-                    {aiPlan.recommendations.map((rec, idx) => (
-                      <div
-                        key={idx}
-                        className="p-3.5 rounded-[6px] bg-[#FFFFFF] border border-[#E2E8F0] space-y-2"
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="font-display font-bold text-sm text-[#090D16]">
-                            {rec.optionTitle}
-                          </span>
-                          <span className="font-mono-tech text-[10px] font-semibold px-2 py-0.5 rounded-[4px] bg-[#A2FA8F] text-[#090D16] border border-[#090D16]/15 shrink-0">
-                            {rec.fairnessScore}% MATCH
-                          </span>
-                        </div>
-                        <p className="font-mono-tech text-[11px] font-semibold text-[#014BBE]">
-                          WINDOW: {rec.suggestedSlot}
-                        </p>
-                        <p className="text-xs text-slate-700">{rec.reasoning}</p>
-                        <button
-                          type="button"
-                          disabled={submittingBooking}
-                          onClick={() =>
-                            submitBookingRequest(
-                              rec.targetEquipmentId,
-                              rec.startHour || 11,
-                              rec.endHour || 13,
-                              rec.suggestedSlot,
-                              `${rec.optionTitle} (${rec.fairnessScore}% Match)`
-                            )
-                          }
-                          className="cta-paradise px-3.5 py-2 rounded-[6px] text-xs font-semibold"
-                        >
-                          Accept &amp; Route for Faculty Approval
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )
-            )}
-          </div>
-        </div>
-      )}
+      <ConflictResolverModal
+        open={conflictModalOpen}
+        conflictEquipment={conflictEquipment}
+        conflictHourLabel={conflictHourLabel}
+        loading={aiLoading}
+        plan={aiPlan}
+        submitting={submittingBooking}
+        onClose={() => setConflictModalOpen(false)}
+        onAcceptRecommendation={(rec: AiRecommendation) =>
+          submitBookingRequest(
+            rec.targetEquipmentId,
+            rec.startHour || 11,
+            rec.endHour || 13,
+            rec.suggestedSlot,
+            `${rec.optionTitle} (${rec.fairnessScore}% Match)`
+          )
+        }
+      />
     </div>
   );
 }
