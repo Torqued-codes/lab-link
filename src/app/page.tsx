@@ -5,7 +5,6 @@ import {
   Cpu,
   CalendarClock,
   ShieldCheck,
-  Sparkles,
   CheckCircle2,
   AlertTriangle,
   BarChart3,
@@ -14,6 +13,7 @@ import {
   Layers,
   X,
   Lock,
+  SlidersHorizontal,
 } from "lucide-react";
 
 type Role = "STUDENT" | "FACULTY" | "LAB_ADMIN";
@@ -65,7 +65,6 @@ export default function LabLinkFrontend() {
   const [departmentFilter, setDepartmentFilter] = useState("ALL");
   const [loadingData, setLoadingData] = useState(true);
 
-  // Booking Drawer State
   const [bookingTarget, setBookingTarget] = useState<EquipmentItem | null>(null);
   const [projectTitle, setProjectTitle] = useState("Real-Time Edge Vision Navigation");
   const [projectAbstract, setProjectAbstract] = useState(
@@ -75,13 +74,11 @@ export default function LabLinkFrontend() {
   const [slotWindow, setSlotWindow] = useState("Today, 14:00 - 17:00");
   const [submittingBooking, setSubmittingBooking] = useState(false);
 
-  // GenAI Conflict Resolution Modal State
   const [conflictModalOpen, setConflictModalOpen] = useState(false);
   const [conflictEquipment, setConflictEquipment] = useState<EquipmentItem | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiPlan, setAiPlan] = useState<AiResolution | null>(null);
 
-  // Accessible Toast Banner
   const [statusMessage, setStatusMessage] = useState<{ type: "success" | "warn"; text: string } | null>(null);
 
   const notify = useCallback((type: "success" | "warn", text: string) => {
@@ -94,7 +91,6 @@ export default function LabLinkFrontend() {
     return () => clearTimeout(timer);
   }, [statusMessage]);
 
-  // Close open modals on Escape key (WCAG 2.1.2 Keyboard Accessibility)
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") {
@@ -227,7 +223,7 @@ export default function LabLinkFrontend() {
         setBookingTarget(null);
         const item = equipment.find((e) => e.id === targetEquipmentId);
         if (item) {
-          notify("warn", "Slot overlap detected — launching LabLink AI Fair Allocation Engine.");
+          notify("warn", "Slot overlap detected — opening LabLink Allocation Resolver.");
           triggerAiConflictResolver(item);
         }
       } else {
@@ -263,31 +259,34 @@ export default function LabLinkFrontend() {
       : 74;
 
   return (
-    <div className="min-h-screen flex flex-col">
-      {/* Top Navigation & Instant Demo Role Switcher */}
-      <header className="sticky top-0 z-30 border-b border-white/10 bg-[#040B18]/90 backdrop-blur">
+    <div className="min-h-screen flex flex-col bg-[#F4F7FB] text-[#090D16]">
+      {/* Structural Top Header */}
+      <header className="sticky top-0 z-30 border-b border-[#E2E8F0] bg-[#FFFFFF]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div
               aria-hidden="true"
-              className="w-9 h-9 rounded-xl bg-[#014BBE] border border-[#2CBEF1]/60 flex items-center justify-center font-extrabold text-white shadow-md"
+              className="w-8 h-8 rounded-[6px] bg-[#014BBE] flex items-center justify-center font-display font-bold text-sm text-[#F8FAFC]"
             >
               LL
             </div>
-            <div>
-              <span className="font-extrabold text-lg tracking-tight text-white">LabLink</span>
-              <span className="hidden sm:inline-block ml-2.5 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-[#2CBEF1]/15 text-[#2CBEF1] border border-[#2CBEF1]/35">
-                GenAI Resource Orchestrator
+            <div className="flex items-center gap-2.5">
+              <span className="font-display font-bold text-lg text-[#090D16]">LabLink</span>
+              <span className="hidden sm:inline-block font-mono-tech text-[11px] font-medium px-2 py-0.5 rounded-[4px] bg-[#014BBE]/10 text-[#014BBE] border border-[#014BBE]/20">
+                CAMPUS-RESOURCE-OS
               </span>
             </div>
           </div>
 
-          <nav aria-label="Platform Role Switcher" className="flex items-center gap-1 bg-[#0A1830] p-1 rounded-xl border border-white/15">
+          <nav
+            aria-label="Platform Role Switcher"
+            className="flex items-center gap-1 bg-[#F4F7FB] p-1 rounded-[8px] border border-[#E2E8F0]"
+          >
             {(
               [
                 { key: "STUDENT", label: "Student Portal" },
                 { key: "FACULTY", label: "Faculty Queue" },
-                { key: "LAB_ADMIN", label: "Lab Analytics" },
+                { key: "LAB_ADMIN", label: "Lab Telemetry" },
               ] as const
             ).map((tab) => (
               <button
@@ -295,10 +294,10 @@ export default function LabLinkFrontend() {
                 type="button"
                 aria-pressed={role === tab.key}
                 onClick={() => setRole(tab.key)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                className={`px-3 py-1.5 rounded-[6px] text-xs font-semibold transition ${
                   role === tab.key
-                    ? "bg-[#014BBE] text-white shadow"
-                    : "text-slate-300 hover:text-white"
+                    ? "bg-[#014BBE] text-[#F8FAFC]"
+                    : "text-[#090D16]/75 hover:text-[#090D16]"
                 }`}
               >
                 {tab.label}
@@ -308,32 +307,34 @@ export default function LabLinkFrontend() {
         </div>
       </header>
 
-      {/* Hero Section */}
-      <section className="hero-gradient border-b border-white/10 py-10 px-4 sm:px-6">
-        <div className="max-w-7xl mx-auto grid lg:grid-cols-3 gap-8 items-center">
-          <div className="lg:col-span-2 space-y-4">
-            <div className="inline-flex items-center gap-2 text-xs font-bold px-3 py-1 rounded-full bg-white/10 text-[#2CBEF1] border border-[#2CBEF1]/30">
-              <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
-              Cross-Department Laboratory Access &amp; AI Scheduling
+      {/* Directional Hero Section */}
+      <section className="hero-dazzling border-b border-white/15 py-10 px-4 sm:px-6">
+        <div className="max-w-7xl mx-auto grid lg:grid-cols-3 gap-6 items-stretch">
+          <div className="lg:col-span-2 flex flex-col justify-center space-y-3.5">
+            <div className="inline-flex items-center gap-2 self-start font-mono-tech text-xs font-medium px-2.5 py-1 rounded-[4px] bg-[#090D16]/30 text-[#2CBEF1] border border-[#2CBEF1]/35">
+              <SlidersHorizontal className="w-3.5 h-3.5" aria-hidden="true" />
+              CROSS-DEPARTMENT LAB ORCHESTRATION
             </div>
-            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white leading-tight">
-              Discover Campus Hardware.{" "}
-              <span className="text-[#2CBEF1]">Resolve Slot Clashes Fairly with AI.</span>
+            <h1 className="font-display text-3xl sm:text-4xl font-bold text-[#F8FAFC] leading-tight">
+              Allocate Specialized Lab Hardware.{" "}
+              <span className="text-[#2CBEF1]">Resolve Clashes Fairly.</span>
             </h1>
-            <p className="text-slate-200 max-w-2xl text-sm sm:text-base">
-              Search GPUs, oscilloscopes, and rapid prototyping rigs across CSE, ECE, Robotics, and Mechanical labs—backed by project deadline prioritization and faculty mentor workflows.
+            <p className="text-[#F8FAFC]/85 max-w-2xl text-sm sm:text-base">
+              Discover workstations, oscilloscopes, and fabrication kits across CSE, ECE, Robotics, and Mechanical labs—governed by project deadlines and faculty approval workflows.
             </p>
           </div>
 
-          {/* Paradise Green High-Contrast Demo Trigger Card */}
-          <div className="cta-paradise rounded-2xl p-6 flex flex-col justify-between shadow-2xl">
+          {/* Paradise Green Action Card (10% Accent Rule, Obsidian Ink Text) */}
+          <div className="cta-paradise rounded-[8px] p-6 flex flex-col justify-between">
             <div className="space-y-1.5">
-              <span className="text-xs font-extrabold uppercase tracking-wider opacity-85">
-                Interactive Conflict Simulation
+              <span className="font-mono-tech text-[11px] font-semibold uppercase tracking-wider text-[#090D16]/75">
+                CONFLICT ENGINE SANDBOX
               </span>
-              <h2 className="text-xl font-extrabold">Test AI Fair Allocation</h2>
-              <p className="text-xs font-semibold opacity-90">
-                Simulate a double-booked NVIDIA Jetson AGX Orin slot and inspect Gemini&apos;s deadline-aware recommendations.
+              <h2 className="font-display text-xl font-bold text-[#090D16]">
+                Test Fair Slot Resolution
+              </h2>
+              <p className="text-xs font-medium text-[#090D16]/85">
+                Simulate a double-booked Jetson AGX Orin window and inspect deadline-weighted alternatives.
               </p>
             </div>
             <button
@@ -342,9 +343,10 @@ export default function LabLinkFrontend() {
                 const clashItem = equipment.find((e) => !e.isAvailable) || equipment[0];
                 if (clashItem) triggerAiConflictResolver(clashItem);
               }}
-              className="mt-5 w-full py-2.5 px-4 rounded-xl bg-[#051124] text-[#82FA6F] font-bold text-sm flex items-center justify-center gap-2 hover:opacity-95"
+              className="mt-5 w-full py-2.5 px-4 rounded-[6px] bg-[#090D16] text-[#F8FAFC] font-semibold text-xs flex items-center justify-between hover:bg-[#090D16]/90"
             >
-              Simulate Slot Clash <ArrowRight className="w-4 h-4" aria-hidden="true" />
+              <span>Simulate Scheduling Clash</span>
+              <ArrowRight className="w-4 h-4 text-[#A2FA8F]" aria-hidden="true" />
             </button>
           </div>
         </div>
@@ -355,52 +357,52 @@ export default function LabLinkFrontend() {
         {statusMessage && (
           <div
             role="status"
-            className={`px-4 py-3 rounded-xl shadow-2xl font-bold text-sm flex items-center gap-2.5 border ${
+            className={`px-4 py-3 rounded-[6px] font-semibold text-xs flex items-center gap-2.5 border ${
               statusMessage.type === "success"
-                ? "bg-[#82FA6F] text-[#051124] border-[#051124]/20"
-                : "bg-amber-300 text-[#051124] border-[#051124]/20"
+                ? "bg-[#A2FA8F] text-[#090D16] border-[#090D16]/20"
+                : "bg-[#090D16] text-[#F8FAFC] border-[#2CBEF1]"
             }`}
           >
             {statusMessage.type === "success" ? (
-              <CheckCircle2 className="w-4 h-4 shrink-0" aria-hidden="true" />
+              <CheckCircle2 className="w-4 h-4 shrink-0 text-[#090D16]" aria-hidden="true" />
             ) : (
-              <AlertTriangle className="w-4 h-4 shrink-0" aria-hidden="true" />
+              <AlertTriangle className="w-4 h-4 shrink-0 text-[#2CBEF1]" aria-hidden="true" />
             )}
             <span>{statusMessage.text}</span>
           </div>
         )}
       </div>
 
-      {/* Main Workspace */}
+      {/* Main Content Canvas */}
       <main id="main-content" className="max-w-7xl mx-auto w-full px-4 sm:px-6 py-8 flex-1 space-y-8">
         {role === "STUDENT" && (
           <>
-            {/* Search & Department Filter Bar */}
+            {/* Search & Department Filter Controls */}
             <section aria-label="Equipment Discovery Filters" className="flex flex-col md:flex-row gap-3">
               <div className="flex-1">
                 <label htmlFor="equipment-search" className="sr-only">
-                  Search equipment by project requirement, specification, or lab
+                  Search equipment by specification, department, or project requirement
                 </label>
                 <input
                   id="equipment-search"
                   type="search"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search by project need (e.g., 'CUDA edge AI', 'Oscilloscope', 'Carbon 3D printer')..."
-                  className="w-full bg-[#0A1830] border border-white/15 rounded-xl px-4 py-3 text-sm text-white placeholder:text-slate-400 focus:border-[#2CBEF1]"
+                  placeholder="Filter by hardware spec or need (e.g., 'CUDA', 'Oscilloscope', 'Carbon 3D')..."
+                  className="w-full bg-[#FFFFFF] border border-[#E2E8F0] rounded-[6px] px-3.5 py-2.5 text-sm text-[#090D16] placeholder:text-slate-400 focus:border-[#014BBE]"
                 />
               </div>
-              <div role="group" aria-label="Filter by Department" className="flex gap-2 flex-wrap">
+              <div role="group" aria-label="Filter by Department" className="flex gap-1.5 flex-wrap">
                 {["ALL", "CSE", "Robotics", "ECE", "Mechanical"].map((dept) => (
                   <button
                     key={dept}
                     type="button"
                     aria-pressed={departmentFilter === dept}
                     onClick={() => setDepartmentFilter(dept)}
-                    className={`px-3.5 py-2.5 rounded-xl text-xs font-bold border transition ${
+                    className={`px-3.5 py-2 rounded-[6px] text-xs font-semibold border transition ${
                       departmentFilter === dept
-                        ? "bg-[#2CBEF1] text-[#051124] border-[#2CBEF1]"
-                        : "bg-[#0A1830] text-slate-200 border-white/15 hover:border-white/35"
+                        ? "bg-[#014BBE] text-[#F8FAFC] border-[#014BBE]"
+                        : "bg-[#FFFFFF] text-[#090D16] border-[#E2E8F0] hover:border-[#014BBE]/50"
                     }`}
                   >
                     {dept}
@@ -409,66 +411,72 @@ export default function LabLinkFrontend() {
               </div>
             </section>
 
-            {/* Equipment Catalog Grid */}
+            {/* Equipment Inventory Grid */}
             <section aria-label="Available Laboratory Equipment">
               {loadingData ? (
-                <p className="text-sm text-[#2CBEF1] animate-pulse">Loading cross-department laboratory inventory...</p>
+                <p className="font-mono-tech text-xs text-[#014BBE]">
+                  LOADING_CROSS_DEPARTMENT_INVENTORY...
+                </p>
               ) : equipment.length === 0 ? (
-                <div className="bg-[#0A1830] border border-white/10 rounded-2xl p-8 text-center text-sm text-slate-300">
-                  No equipment matched your filter. Try clearing the search box or switching department tabs.
+                <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-[8px] p-8 text-center text-sm text-slate-600">
+                  No laboratory equipment matched your filter criteria.
                 </div>
               ) : (
-                <div className="grid md:grid-cols-2 gap-5">
+                <div className="grid md:grid-cols-2 gap-4">
                   {equipment.map((item) => (
                     <article
                       key={item.id}
-                      className="bg-[#0A1830] border border-white/10 rounded-2xl p-5 flex flex-col justify-between hover:border-[#2CBEF1]/50 transition"
+                      className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-[8px] p-5 flex flex-col justify-between hover:border-[#014BBE]/45 transition"
                     >
-                      <div className="space-y-2.5">
+                      <div className="space-y-3">
                         <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs font-bold text-[#2CBEF1]">{item.department}</span>
+                          <span className="font-mono-tech text-[11px] font-semibold text-[#014BBE] uppercase">
+                            {item.department}
+                          </span>
                           {item.isAvailable ? (
-                            <span className="text-xs font-extrabold px-2.5 py-0.5 rounded-full bg-[#82FA6F]/20 text-[#82FA6F] border border-[#82FA6F]/30">
-                              Available Now
+                            <span className="inline-flex items-center gap-1.5 font-mono-tech text-[11px] font-semibold px-2 py-0.5 rounded-[4px] bg-[#A2FA8F]/35 text-[#090D16] border border-[#090D16]/15">
+                              <span className="w-1.5 h-1.5 rounded-full bg-[#090D16]" />
+                              AVAILABLE
                             </span>
                           ) : (
-                            <span className="text-xs font-extrabold px-2.5 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/30">
-                              Slot Clash • {item.activeConflictSlot || "14:00 - 17:00"}
+                            <span className="font-mono-tech text-[11px] font-semibold px-2 py-0.5 rounded-[4px] bg-amber-100 text-[#090D16] border border-amber-300">
+                              CLASH • {item.activeConflictSlot || "14:00 - 17:00"}
                             </span>
                           )}
                         </div>
 
-                        <h2 className="text-lg font-extrabold text-white flex items-center gap-2">
-                          <Cpu className="w-5 h-5 text-[#2CBEF1] shrink-0" aria-hidden="true" />
+                        <h2 className="font-display text-lg font-bold text-[#090D16] flex items-center gap-2">
+                          <Cpu className="w-4 h-4 text-[#014BBE] shrink-0" aria-hidden="true" />
                           <span>{item.name}</span>
                         </h2>
 
-                        <p className="text-xs text-slate-200">{item.specs}</p>
+                        <p className="font-mono-tech text-xs text-slate-700 bg-[#F4F7FB] px-2.5 py-1.5 rounded-[4px] border border-[#E2E8F0]">
+                          {item.specs}
+                        </p>
 
-                        <div className="flex items-center justify-between text-xs text-slate-400 pt-1">
-                          <span>Location: {item.labRoom}</span>
-                          <span>Utilization: {item.utilizationPct}%</span>
+                        <div className="flex items-center justify-between font-mono-tech text-[11px] text-slate-600 pt-0.5">
+                          <span>ROOM: {item.labRoom}</span>
+                          <span>UTILIZATION: {item.utilizationPct}%</span>
                         </div>
                       </div>
 
-                      <div className="mt-5 pt-4 border-t border-white/10">
+                      <div className="mt-5 pt-4 border-t border-[#E2E8F0]">
                         {item.isAvailable ? (
                           <button
                             type="button"
                             onClick={() => setBookingTarget(item)}
-                            className="cta-paradise w-full py-2.5 px-4 rounded-xl font-extrabold text-xs flex items-center justify-center gap-2"
+                            className="cta-paradise w-full py-2.5 px-4 rounded-[6px] font-semibold text-xs flex items-center justify-center gap-2"
                           >
                             <CalendarClock className="w-4 h-4" aria-hidden="true" />
-                            Book Project-Based Slot
+                            Request Equipment Slot
                           </button>
                         ) : (
                           <button
                             type="button"
                             onClick={() => triggerAiConflictResolver(item)}
-                            className="w-full py-2.5 px-4 rounded-xl bg-[#014BBE] hover:bg-[#014BBE]/90 text-white font-bold text-xs flex items-center justify-center gap-2 border border-[#2CBEF1]/50"
+                            className="w-full py-2.5 px-4 rounded-[6px] bg-[#014BBE] hover:bg-[#014BBE]/90 text-[#F8FAFC] font-semibold text-xs flex items-center justify-center gap-2"
                           >
-                            <Sparkles className="w-4 h-4 text-[#82FA6F]" aria-hidden="true" />
-                            Resolve Conflict with LabLink AI
+                            Resolve Slot Conflict
                           </button>
                         )}
                       </div>
@@ -478,32 +486,32 @@ export default function LabLinkFrontend() {
               )}
             </section>
 
-            {/* Student Active Project Requests */}
+            {/* Student Project-Tied Requests */}
             <section aria-label="My Project Access Requests" className="space-y-3">
-              <h2 className="text-lg font-extrabold text-white flex items-center gap-2">
-                <Layers className="w-5 h-5 text-[#2CBEF1]" aria-hidden="true" />
-                My Project-Based Equipment Requests
+              <h2 className="font-display text-lg font-bold text-[#090D16] flex items-center gap-2">
+                <Layers className="w-4 h-4 text-[#014BBE]" aria-hidden="true" />
+                Active Project-Based Reservations
               </h2>
-              <div className="grid sm:grid-cols-2 gap-4">
+              <div className="grid sm:grid-cols-2 gap-3.5">
                 {bookings.map((bk) => (
                   <div
                     key={bk.id}
-                    className="bg-[#0A1830] border border-white/10 rounded-2xl p-4 flex items-center justify-between gap-3"
+                    className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-[8px] p-4 flex items-center justify-between gap-3"
                   >
                     <div className="space-y-1">
-                      <p className="font-bold text-sm text-white">{bk.equipmentName}</p>
-                      <p className="text-xs text-slate-300">Project: {bk.projectTitle}</p>
-                      <p className="text-xs text-[#2CBEF1] flex items-center gap-1">
-                        <Clock className="w-3.5 h-3.5" aria-hidden="true" /> {bk.slotLabel}
+                      <p className="font-semibold text-sm text-[#090D16]">{bk.equipmentName}</p>
+                      <p className="text-xs text-slate-600">Project: {bk.projectTitle}</p>
+                      <p className="font-mono-tech text-[11px] text-[#014BBE] flex items-center gap-1">
+                        <Clock className="w-3 h-3" aria-hidden="true" /> {bk.slotLabel}
                       </p>
                     </div>
                     <span
-                      className={`text-xs font-extrabold px-2.5 py-1 rounded-lg ${
+                      className={`font-mono-tech text-[11px] font-semibold px-2.5 py-1 rounded-[4px] border ${
                         bk.status === "APPROVED"
-                          ? "bg-[#82FA6F]/20 text-[#82FA6F]"
+                          ? "bg-[#A2FA8F]/40 text-[#090D16] border-[#090D16]/15"
                           : bk.status === "REJECTED"
-                          ? "bg-red-500/20 text-red-300"
-                          : "bg-[#014BBE] text-white"
+                          ? "bg-red-100 text-red-900 border-red-200"
+                          : "bg-[#014BBE]/10 text-[#014BBE] border-[#014BBE]/20"
                       }`}
                     >
                       {bk.status}
@@ -517,13 +525,13 @@ export default function LabLinkFrontend() {
 
         {role === "FACULTY" && (
           <section aria-label="Faculty Mentor Approval Queue" className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-extrabold text-white flex items-center gap-2">
-                <ShieldCheck className="w-6 h-6 text-[#82FA6F]" aria-hidden="true" />
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="font-display text-xl font-bold text-[#090D16] flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-[#014BBE]" aria-hidden="true" />
                 Faculty Mentor Approval Queue
               </h2>
-              <span className="text-xs font-semibold text-slate-300">
-                RBAC Protected • State-Machine Enforced
+              <span className="font-mono-tech text-[11px] font-medium px-2.5 py-1 rounded-[4px] bg-[#FFFFFF] border border-[#E2E8F0] text-slate-600">
+                RBAC_GUARD • STATE_MACHINE_ENFORCED
               </span>
             </div>
 
@@ -531,22 +539,25 @@ export default function LabLinkFrontend() {
               {bookings.map((bk) => (
                 <article
                   key={bk.id}
-                  className="bg-[#0A1830] border border-white/10 rounded-2xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4"
+                  className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-[8px] p-5 flex flex-col md:flex-row md:items-center justify-between gap-4"
                 >
                   <div className="space-y-1.5">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="font-extrabold text-base text-white">{bk.projectTitle}</h3>
-                      <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-[#014BBE] text-white">
-                        Deadline: {bk.projectDeadline}
+                      <h3 className="font-display font-bold text-base text-[#090D16]">
+                        {bk.projectTitle}
+                      </h3>
+                      <span className="font-mono-tech text-[11px] font-semibold px-2 py-0.5 rounded-[4px] bg-[#014BBE] text-[#F8FAFC]">
+                        DUE: {bk.projectDeadline}
                       </span>
                     </div>
-                    <p className="text-xs text-slate-200">
-                      Student: <strong>{bk.studentName}</strong> • Hardware: <strong>{bk.equipmentName}</strong>
+                    <p className="text-xs text-slate-700">
+                      Student: <strong>{bk.studentName}</strong> • Hardware:{" "}
+                      <strong>{bk.equipmentName}</strong>
                     </p>
-                    <p className="text-xs text-[#2CBEF1] font-semibold">Requested Slot: {bk.slotLabel}</p>
+                    <p className="font-mono-tech text-xs text-[#014BBE]">SLOT: {bk.slotLabel}</p>
                     {bk.aiRationale && (
-                      <p className="text-xs text-[#82FA6F] bg-[#050E1F] px-3 py-1.5 rounded-lg border border-[#82FA6F]/25">
-                        AI Allocation Note: {bk.aiRationale}
+                      <p className="font-mono-tech text-[11px] text-[#090D16] bg-[#F4F7FB] px-3 py-1.5 rounded-[4px] border border-[#E2E8F0]">
+                        ALLOCATION_NOTE: {bk.aiRationale}
                       </p>
                     )}
                   </div>
@@ -557,20 +568,20 @@ export default function LabLinkFrontend() {
                         <button
                           type="button"
                           onClick={() => processFacultyApproval(bk.id, "APPROVED")}
-                          className="cta-paradise px-4 py-2 rounded-xl text-xs font-extrabold"
+                          className="cta-paradise px-4 py-2 rounded-[6px] text-xs font-semibold"
                         >
-                          Approve Access
+                          Approve Slot
                         </button>
                         <button
                           type="button"
                           onClick={() => processFacultyApproval(bk.id, "REJECTED")}
-                          className="px-4 py-2 rounded-xl text-xs font-bold bg-white/10 text-slate-200 hover:bg-red-500/25 hover:text-red-200"
+                          className="px-4 py-2 rounded-[6px] text-xs font-semibold bg-[#F4F7FB] text-[#090D16] border border-[#E2E8F0] hover:bg-red-50 hover:border-red-300"
                         >
                           Reject
                         </button>
                       </>
                     ) : (
-                      <span className="text-xs font-extrabold px-3 py-1.5 rounded-xl bg-white/10 text-[#82FA6F]">
+                      <span className="font-mono-tech text-xs font-semibold px-3 py-1.5 rounded-[4px] bg-[#F4F7FB] border border-[#E2E8F0] text-[#090D16]">
                         {bk.status}
                       </span>
                     )}
@@ -582,49 +593,70 @@ export default function LabLinkFrontend() {
         )}
 
         {role === "LAB_ADMIN" && (
-          <section aria-label="Laboratory Utilization Telemetry" className="space-y-6">
-            <h2 className="text-xl font-extrabold text-white flex items-center gap-2">
-              <BarChart3 className="w-6 h-6 text-[#2CBEF1]" aria-hidden="true" />
+          <section aria-label="Laboratory Utilization Telemetry" className="space-y-5">
+            <h2 className="font-display text-xl font-bold text-[#090D16] flex items-center gap-2">
+              <BarChart3 className="w-5 h-5 text-[#014BBE]" aria-hidden="true" />
               Cross-Department Resource Utilization &amp; Security Telemetry
             </h2>
 
             <div className="grid sm:grid-cols-3 gap-4">
-              <div className="bg-[#0A1830] border border-white/10 rounded-2xl p-5">
-                <p className="text-xs font-semibold text-slate-400">Mean Equipment Utilization</p>
-                <p className="text-3xl font-extrabold text-[#82FA6F] mt-1">{avgUtilization}%</p>
-                <p className="text-xs text-slate-300 mt-1">Balanced across CSE, ECE, Robotics &amp; Mech</p>
-              </div>
-              <div className="bg-[#0A1830] border border-white/10 rounded-2xl p-5">
-                <p className="text-xs font-semibold text-slate-400">Active Project Bookings</p>
-                <p className="text-3xl font-extrabold text-[#2CBEF1] mt-1">{bookings.length}</p>
-                <p className="text-xs text-slate-300 mt-1">100% tied to verified project deadlines</p>
-              </div>
-              <div className="bg-[#0A1830] border border-white/10 rounded-2xl p-5">
-                <p className="text-xs font-semibold text-slate-400">OWASP &amp; TOCTOU Posture</p>
-                <p className="text-3xl font-extrabold text-white mt-1 flex items-center gap-2">
-                  Hardened <Lock className="w-5 h-5 text-[#82FA6F]" aria-hidden="true" />
+              <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-[8px] p-5">
+                <p className="font-mono-tech text-[11px] text-slate-500 uppercase">
+                  MEAN HARDWARE UTILIZATION
                 </p>
-                <p className="text-xs text-slate-300 mt-1">Atomic slot lock + XML prompt isolation</p>
+                <p className="font-display text-3xl font-bold text-[#014BBE] mt-1">
+                  {avgUtilization}%
+                </p>
+                <p className="text-xs text-slate-600 mt-1">
+                  Load-balanced across CSE, ECE, Robotics &amp; Mech
+                </p>
+              </div>
+              <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-[8px] p-5">
+                <p className="font-mono-tech text-[11px] text-slate-500 uppercase">
+                  ACTIVE PROJECT RESERVATIONS
+                </p>
+                <p className="font-display text-3xl font-bold text-[#090D16] mt-1">
+                  {bookings.length}
+                </p>
+                <p className="text-xs text-slate-600 mt-1">
+                  100% mapped to verified project milestones
+                </p>
+              </div>
+              <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-[8px] p-5">
+                <p className="font-mono-tech text-[11px] text-slate-500 uppercase">
+                  CONCURRENCY &amp; OWASP GUARD
+                </p>
+                <p className="font-display text-3xl font-bold text-[#090D16] mt-1 flex items-center gap-2">
+                  Active <Lock className="w-5 h-5 text-[#014BBE]" aria-hidden="true" />
+                </p>
+                <p className="text-xs text-slate-600 mt-1">
+                  Atomic slot mutex + XML prompt boundary
+                </p>
               </div>
             </div>
 
-            <div className="bg-[#0A1830] border border-white/10 rounded-2xl p-5 space-y-4">
-              <h3 className="text-sm font-extrabold text-white">Equipment Utilization Breakdown</h3>
-              <div className="space-y-3">
+            <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-[8px] p-5 space-y-4">
+              <h3 className="font-display text-base font-bold text-[#090D16]">
+                Equipment Utilization Breakdown
+              </h3>
+              <div className="space-y-3.5">
                 {equipment.map((item) => (
-                  <div key={item.id} className="space-y-1">
+                  <div key={item.id} className="space-y-1.5">
                     <div className="flex justify-between text-xs">
-                      <span className="font-bold text-slate-200">
-                        {item.name} <span className="text-slate-400">({item.labRoom})</span>
+                      <span className="font-semibold text-[#090D16]">
+                        {item.name}{" "}
+                        <span className="font-mono-tech text-slate-500">({item.labRoom})</span>
                       </span>
-                      <span className="font-extrabold text-[#2CBEF1]">{item.utilizationPct}%</span>
+                      <span className="font-mono-tech font-semibold text-[#014BBE]">
+                        {item.utilizationPct}%
+                      </span>
                     </div>
-                    <div className="w-full h-2.5 rounded-full bg-[#050E1F] overflow-hidden">
+                    <div className="w-full h-2 rounded-[4px] bg-[#F4F7FB] border border-[#E2E8F0] overflow-hidden">
                       <div
-                        className="h-full rounded-full"
+                        className="h-full"
                         style={{
                           width: `${item.utilizationPct}%`,
-                          backgroundColor: item.utilizationPct > 85 ? "#2CBEF1" : "#82FA6F",
+                          backgroundColor: item.utilizationPct > 85 ? "#014BBE" : "#2CBEF1",
                         }}
                       />
                     </div>
@@ -642,15 +674,15 @@ export default function LabLinkFrontend() {
           role="dialog"
           aria-modal="true"
           aria-labelledby="booking-modal-title"
-          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 bg-[#090D16]/65 flex items-center justify-center p-4"
         >
-          <div className="bg-[#0A1830] border border-[#2CBEF1]/40 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
-            <div className="flex items-start justify-between gap-3">
+          <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-[8px] max-w-lg w-full p-6 space-y-4">
+            <div className="flex items-start justify-between gap-3 border-b border-[#E2E8F0] pb-3">
               <div>
-                <span className="text-xs font-extrabold text-[#2CBEF1] uppercase">
-                  Project-Based Access Request
+                <span className="font-mono-tech text-[11px] font-semibold text-[#014BBE] uppercase">
+                  PROJECT-BASED ACCESS REQUEST
                 </span>
-                <h2 id="booking-modal-title" className="text-lg font-extrabold text-white mt-0.5">
+                <h2 id="booking-modal-title" className="font-display text-lg font-bold text-[#090D16] mt-0.5">
                   {bookingTarget.name}
                 </h2>
               </div>
@@ -658,7 +690,7 @@ export default function LabLinkFrontend() {
                 type="button"
                 aria-label="Close booking dialog"
                 onClick={() => setBookingTarget(null)}
-                className="text-slate-400 hover:text-white p-1"
+                className="text-slate-500 hover:text-[#090D16] p-1"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -669,10 +701,10 @@ export default function LabLinkFrontend() {
                 e.preventDefault();
                 submitBookingRequest(bookingTarget.id, slotWindow);
               }}
-              className="space-y-3"
+              className="space-y-3.5"
             >
               <div>
-                <label htmlFor="proj-title" className="block text-xs font-bold text-slate-200 mb-1">
+                <label htmlFor="proj-title" className="block text-xs font-semibold text-[#090D16] mb-1">
                   Project Title
                 </label>
                 <input
@@ -681,13 +713,13 @@ export default function LabLinkFrontend() {
                   maxLength={140}
                   value={projectTitle}
                   onChange={(e) => setProjectTitle(e.target.value)}
-                  className="w-full bg-[#050E1F] border border-white/15 rounded-xl px-3.5 py-2 text-sm text-white"
+                  className="w-full bg-[#F4F7FB] border border-[#E2E8F0] rounded-[6px] px-3 py-2 text-sm text-[#090D16]"
                 />
               </div>
 
               <div>
-                <label htmlFor="proj-abstract" className="block text-xs font-bold text-slate-200 mb-1">
-                  Technical Justification &amp; Resource Need
+                <label htmlFor="proj-abstract" className="block text-xs font-semibold text-[#090D16] mb-1">
+                  Technical Justification &amp; Hardware Requirement
                 </label>
                 <textarea
                   id="proj-abstract"
@@ -696,13 +728,13 @@ export default function LabLinkFrontend() {
                   maxLength={600}
                   value={projectAbstract}
                   onChange={(e) => setProjectAbstract(e.target.value)}
-                  className="w-full bg-[#050E1F] border border-white/15 rounded-xl px-3.5 py-2 text-sm text-white"
+                  className="w-full bg-[#F4F7FB] border border-[#E2E8F0] rounded-[6px] px-3 py-2 text-sm text-[#090D16]"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label htmlFor="proj-deadline" className="block text-xs font-bold text-slate-200 mb-1">
+                  <label htmlFor="proj-deadline" className="block text-xs font-semibold text-[#090D16] mb-1">
                     Project Milestone Deadline
                   </label>
                   <input
@@ -711,18 +743,18 @@ export default function LabLinkFrontend() {
                     required
                     value={projectDeadline}
                     onChange={(e) => setProjectDeadline(e.target.value)}
-                    className="w-full bg-[#050E1F] border border-white/15 rounded-xl px-3 py-2 text-sm text-white"
+                    className="font-mono-tech w-full bg-[#F4F7FB] border border-[#E2E8F0] rounded-[6px] px-3 py-2 text-xs text-[#090D16]"
                   />
                 </div>
                 <div>
-                  <label htmlFor="slot-select" className="block text-xs font-bold text-slate-200 mb-1">
+                  <label htmlFor="slot-select" className="block text-xs font-semibold text-[#090D16] mb-1">
                     Preferred Lab Window
                   </label>
                   <select
                     id="slot-select"
                     value={slotWindow}
                     onChange={(e) => setSlotWindow(e.target.value)}
-                    className="w-full bg-[#050E1F] border border-white/15 rounded-xl px-3 py-2 text-sm text-white"
+                    className="font-mono-tech w-full bg-[#F4F7FB] border border-[#E2E8F0] rounded-[6px] px-3 py-2 text-xs text-[#090D16]"
                   >
                     <option value="Today, 14:00 - 17:00">Today, 14:00 - 17:00</option>
                     <option value="Tomorrow, 09:30 - 12:30">Tomorrow, 09:30 - 12:30</option>
@@ -735,14 +767,14 @@ export default function LabLinkFrontend() {
                 <button
                   type="button"
                   onClick={() => setBookingTarget(null)}
-                  className="px-4 py-2.5 rounded-xl text-xs font-bold bg-white/10 text-slate-200"
+                  className="px-4 py-2 rounded-[6px] text-xs font-semibold bg-[#F4F7FB] text-[#090D16] border border-[#E2E8F0]"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={submittingBooking}
-                  className="cta-paradise px-5 py-2.5 rounded-xl text-xs font-extrabold"
+                  className="cta-paradise px-4 py-2 rounded-[6px] text-xs font-semibold"
                 >
                   {submittingBooking ? "Verifying Slot..." : "Submit for Faculty Approval"}
                 </button>
@@ -758,16 +790,16 @@ export default function LabLinkFrontend() {
           role="dialog"
           aria-modal="true"
           aria-labelledby="conflict-modal-title"
-          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 bg-[#090D16]/65 flex items-center justify-center p-4"
         >
-          <div className="bg-[#0A1830] border border-[#2CBEF1]/50 rounded-2xl max-w-xl w-full p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-start justify-between gap-3">
+          <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-[8px] max-w-xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-start justify-between gap-3 border-b border-[#E2E8F0] pb-3">
               <div>
-                <span className="text-xs font-extrabold text-[#2CBEF1] uppercase">
-                  LabLink Fair Allocation Engine
+                <span className="font-mono-tech text-[11px] font-semibold text-[#014BBE] uppercase">
+                  FAIR RESOURCE ALLOCATION ENGINE
                 </span>
-                <h2 id="conflict-modal-title" className="text-lg font-extrabold text-white flex items-center gap-2 mt-0.5">
-                  <AlertTriangle className="w-5 h-5 text-amber-300" aria-hidden="true" />
+                <h2 id="conflict-modal-title" className="font-display text-lg font-bold text-[#090D16] flex items-center gap-2 mt-0.5">
+                  <AlertTriangle className="w-5 h-5 text-amber-600" aria-hidden="true" />
                   <span>Scheduling Clash: {conflictEquipment?.name}</span>
                 </h2>
               </div>
@@ -775,39 +807,42 @@ export default function LabLinkFrontend() {
                 type="button"
                 aria-label="Close conflict resolution dialog"
                 onClick={() => setConflictModalOpen(false)}
-                className="text-slate-400 hover:text-white p-1"
+                className="text-slate-500 hover:text-[#090D16] p-1"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {aiLoading ? (
-              <div className="py-10 text-center text-sm font-semibold text-[#2CBEF1] animate-pulse">
-                Analyzing project deadlines, 30-day usage equity, and cross-department hardware compatibility...
+              <div className="py-10 text-center font-mono-tech text-xs text-[#014BBE]">
+                EVALUATING_DEADLINES_AND_CROSS_LAB_INVENTORY...
               </div>
             ) : (
               aiPlan && (
                 <div className="space-y-4">
-                  <div className="text-xs bg-[#050E1F] border border-white/10 rounded-xl p-3.5 text-slate-200">
-                    <strong className="text-[#82FA6F]">Fairness Analysis:</strong> {aiPlan.fairnessSummary}
+                  <div className="text-xs bg-[#F4F7FB] border border-[#E2E8F0] rounded-[6px] p-3.5 text-[#090D16]">
+                    <strong className="font-semibold text-[#014BBE]">Fairness Assessment:</strong>{" "}
+                    {aiPlan.fairnessSummary}
                   </div>
 
                   <div className="space-y-3">
                     {aiPlan.recommendations.map((rec, idx) => (
                       <div
                         key={idx}
-                        className="p-4 rounded-xl bg-[#050E1F] border border-white/15 space-y-2"
+                        className="p-4 rounded-[6px] bg-[#FFFFFF] border border-[#E2E8F0] space-y-2"
                       >
                         <div className="flex items-center justify-between gap-2">
-                          <span className="font-extrabold text-sm text-white">{rec.optionTitle}</span>
-                          <span className="text-xs font-extrabold px-2.5 py-0.5 rounded-full bg-[#82FA6F] text-[#051124] shrink-0">
-                            {rec.fairnessScore}% Fairness Match
+                          <span className="font-display font-bold text-sm text-[#090D16]">
+                            {rec.optionTitle}
+                          </span>
+                          <span className="font-mono-tech text-[11px] font-semibold px-2 py-0.5 rounded-[4px] bg-[#A2FA8F] text-[#090D16] border border-[#090D16]/15 shrink-0">
+                            {rec.fairnessScore}% MATCH
                           </span>
                         </div>
-                        <p className="text-xs font-bold text-[#2CBEF1]">
-                          Recommended Window: {rec.suggestedSlot}
+                        <p className="font-mono-tech text-xs font-medium text-[#014BBE]">
+                          WINDOW: {rec.suggestedSlot}
                         </p>
-                        <p className="text-xs text-slate-300">{rec.reasoning}</p>
+                        <p className="text-xs text-slate-700">{rec.reasoning}</p>
                         <button
                           type="button"
                           disabled={submittingBooking}
@@ -818,7 +853,7 @@ export default function LabLinkFrontend() {
                               `${rec.optionTitle} (${rec.fairnessScore}% Match)`
                             )
                           }
-                          className="mt-1 cta-paradise px-3.5 py-2 rounded-lg text-xs font-extrabold"
+                          className="mt-1 cta-paradise px-3.5 py-2 rounded-[6px] text-xs font-semibold"
                         >
                           Accept &amp; Route for Faculty Approval
                         </button>
@@ -834,3 +869,11 @@ export default function LabLinkFrontend() {
     </div>
   );
 }
+
+
+
+
+
+
+
+
