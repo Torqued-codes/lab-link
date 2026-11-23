@@ -19,7 +19,10 @@ import {
   RotateCcw,
   Plus,
   UserCheck,
+  Sparkles,
+  FileCheck2,
 } from "lucide-react";
+import { getEquipmentPreviewImage } from "@/lib/equipment-media";
 
 type Role = "STUDENT" | "FACULTY" | "LAB_ADMIN";
 type SlotState = "OPEN" | "BOOKED" | "MAINTENANCE";
@@ -37,7 +40,7 @@ export interface EquipmentItem {
   requiresApproval: boolean;
   maintenanceLock: boolean;
   utilizationPct: number;
-  hourlySlots: Record<number, SlotState>; // 9..18 representing 09:00..19:00
+  hourlySlots: Record<number, SlotState>;
 }
 
 export interface BookingRecord {
@@ -130,20 +133,18 @@ export default function LabLinkConsole() {
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
   const [loadingData, setLoadingData] = useState(true);
 
-  // Filters & Smart Project Bundle Recommender
   const [searchQuery, setSearchQuery] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("ALL");
   const [smartPrompt, setSmartPrompt] = useState("");
+  const [conciergeLoading, setConciergeLoading] = useState(false);
   const [recommendedBundleIds, setRecommendedBundleIds] = useState<string[]>([]);
   const [bundleSummary, setBundleSummary] = useState<string | null>(null);
 
-  // Master-Detail Selected Equipment & Slot Range
   const [selectedEquipmentId, setSelectedEquipmentId] = useState<string | null>(null);
   const [selectedStartHour, setSelectedStartHour] = useState<number>(10);
   const [selectedDuration, setSelectedDuration] = useState<number>(2);
   const [submittingBooking, setSubmittingBooking] = useState(false);
 
-  // Multi-Project Workspace & Collaborator Tagging
   const [projects, setProjects] = useState<StudentProject[]>(INITIAL_PROJECTS);
   const [activeProjectId, setActiveProjectId] = useState<string>(INITIAL_PROJECTS[0].id);
   const [collabInput, setCollabInput] = useState("");
@@ -153,7 +154,10 @@ export default function LabLinkConsole() {
   const [newProjDeadline, setNewProjDeadline] = useState("2026-11-28");
   const [newProjAbstract, setNewProjAbstract] = useState("");
 
-  // GenAI Conflict Resolution Modal
+  const [facultyAudits, setFacultyAudits] = useState<
+    Record<string, { verdict: string; summary: string; loading?: boolean }>
+  >({});
+
   const [conflictModalOpen, setConflictModalOpen] = useState(false);
   const [conflictEquipment, setConflictEquipment] = useState<EquipmentItem | null>(null);
   const [conflictHourLabel, setConflictHourLabel] = useState("14:00 - 17:00");
@@ -183,7 +187,6 @@ export default function LabLinkConsole() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  // Initialize or synchronize signed HttpOnly RBAC session cookie (zero login wall)
   useEffect(() => {
     let active = true;
     async function initSandboxSession() {
@@ -236,7 +239,7 @@ export default function LabLinkConsole() {
         notify("warn", err.error || `Session switch failed (${res.status})`);
       }
     } catch {
-      notify("warn", "Could not reach /api/auth/session — ensure dev server is running.");
+      notify("warn", "Could not reach /api/auth/session.");
     } finally {
       setSwitchingRole(false);
     }
@@ -294,27 +297,91 @@ export default function LabLinkConsole() {
   }, [bookings]);
   const monthlyQuotaLimit = 12.0;
 
-  function runSmartProjectMatcher(e: React.FormEvent) {
+  const departmentTelemetry = useMemo(() => {
+    const depts = ["CSE", "Robotics", "ECE", "Mechanical"];
+    return depts.map((dept) => {
+      const items = equipment.filter((e) => e.department === dept);
+      const avgUtil =
+        items.length > 0
+          ? Math.round(items.reduce((acc, i) => acc + i.utilizationPct, 0) / items.length)
+          : 0;
+      const locked = items.filter((i) => i.maintenanceLock).length;
+      return { dept, count: items.length, avgUtil, locked };
+    });
+  }, [equipment]);
+
+  async function runAiLabConcierge(e: React.FormEvent) {
     e.preventDefault();
-    const text = smartPrompt.trim().toLowerCase();
+    const text = smartPrompt.trim();
     if (!text) {
       setRecommendedBundleIds([]);
       setBundleSummary(null);
       return;
     }
 
-    const matched = equipment.filter((item) => {
-      const haystack = `${item.name} ${item.specs} ${item.department} ${item.tags.join(" ")}`.toLowerCase();
-      const keywords = text.split(/\W+/).filter((w) => w.length > 2);
-      return keywords.some((kw) => haystack.includes(kw));
-    });
+    setConciergeLoading(true);
+    try {
+      const res = await fetch("/api/ai/concierge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ prompt: text }),
+      });
 
-    const finalBundle = matched.length > 0 ? matched : equipment.slice(0, 2);
-    setRecommendedBundleIds(finalBundle.map((i) => i.id));
-    setBundleSummary(
-      `Matched ${finalBundle.length} cross-department hardware units for "${smartPrompt.trim().slice(0, 64)}"`
-    );
-    if (finalBundle[0]) setSelectedEquipmentId(finalBundle[0].id);
+      const data = await res.json();
+      if (res.ok && data.recommendation) {
+        const rec = data.recommendation;
+        setRecommendedBundleIds(rec.equipmentId ? [rec.equipmentId] : []);
+        if (rec.equipmentId) setSelectedEquipmentId(rec.equipmentId);
+        if (rec.startHour) setSelectedStartHour(rec.startHour);
+        if (rec.duration) setSelectedDuration(rec.duration);
+        setBundleSummary(rec.rationale);
+        notify("success", `AI Concierge selected ${rec.equipmentName} at ${String(rec.startHour).padStart(2, "0")}:00`);
+      } else {
+        notify("warn", data.error || "AI Concierge could not parse request.");
+      }
+    } finally {
+      setConciergeLoading(false);
+    }
+  }
+
+  async function runFacultyAiAudit(bk: BookingRecord) {
+    setFacultyAudits((prev) => ({
+      ...prev,
+      [bk.id]: { verdict: "AUDITING", summary: "Analyzing hardware fit & deadline equity...", loading: true },
+    }));
+
+    try {
+      const res = await fetch("/api/ai/faculty-audit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          bookingId: bk.id,
+          equipmentName: bk.equipmentName,
+          projectTitle: bk.projectTitle,
+          projectDeadline: bk.projectDeadline,
+          slotLabel: bk.slotLabel,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.audit) {
+        setFacultyAudits((prev) => ({
+          ...prev,
+          [bk.id]: { verdict: data.audit.verdict, summary: data.audit.summary, loading: false },
+        }));
+      } else {
+        setFacultyAudits((prev) => ({
+          ...prev,
+          [bk.id]: { verdict: "ERROR", summary: data.error || "Audit unavailable", loading: false },
+        }));
+      }
+    } catch {
+      setFacultyAudits((prev) => ({
+        ...prev,
+        [bk.id]: { verdict: "ERROR", summary: "Network error during audit", loading: false },
+      }));
+    }
   }
 
   function addCollaboratorTag() {
@@ -515,7 +582,7 @@ export default function LabLinkConsole() {
 
   return (
     <div className="min-h-screen flex flex-col lab-grid-bg text-[#090D16]">
-      {/* Explicit Sandbox Evaluator Role Switcher Strip (Signed HttpOnly RBAC Cookie) */}
+      {/* Explicit Sandbox Evaluator Role Switcher Strip */}
       <div
         role="region"
         aria-label="Sandbox Evaluator Persona Switcher"
@@ -527,7 +594,7 @@ export default function LabLinkConsole() {
               SANDBOX EVALUATOR MODE
             </span>
             <span className="text-xs text-slate-300 hidden sm:inline">
-              Zero-login evaluation session • Switches signed <code className="font-mono-tech text-[#A2FA8F]">HttpOnly</code> RBAC cookie:
+              Zero-login evaluation session • Signed <code className="font-mono-tech text-[#A2FA8F]">HttpOnly</code> RBAC cookie:
             </span>
           </div>
 
@@ -666,18 +733,22 @@ export default function LabLinkConsole() {
       <main id="main-content" className="max-w-[1400px] mx-auto w-full px-4 sm:px-6 py-6 flex-1 space-y-6">
         {role === "STUDENT" && (
           <>
-            {/* Top Utility Bar: Smart "Match My Project" Bundle Recommender + Active Project Selector */}
+            {/* Top Utility Bar: Natural-Language Ask LabLink AI Concierge + Active Project Selector */}
             <div className="grid lg:grid-cols-12 gap-4">
               <form
-                onSubmit={runSmartProjectMatcher}
+                onSubmit={runAiLabConcierge}
                 className="lg:col-span-7 bg-[#FFFFFF] border border-[#E2E8F0] rounded-[8px] p-4 flex flex-col justify-between gap-3"
               >
                 <div className="flex items-center justify-between">
-                  <label htmlFor="smart-project-match" className="font-display font-bold text-sm text-[#090D16]">
-                    Smart &ldquo;Match My Project&rdquo; Hardware Recommender
+                  <label
+                    htmlFor="smart-project-match"
+                    className="font-display font-bold text-sm text-[#090D16] flex items-center gap-1.5"
+                  >
+                    <Sparkles className="w-4 h-4 text-[#014BBE]" aria-hidden="true" />
+                    Ask LabLink AI Concierge (Natural-Language Slot Matcher)
                   </label>
                   <span className="font-mono-tech text-[10px] px-2 py-0.5 rounded-[4px] bg-[#014BBE]/10 text-[#014BBE]">
-                    SEMANTIC_BUNDLE_MATCH
+                    GEMINI_INTENT_ROUTER
                   </span>
                 </div>
                 <div className="flex gap-2">
@@ -686,16 +757,17 @@ export default function LabLinkConsole() {
                     type="text"
                     value={smartPrompt}
                     onChange={(e) => setSmartPrompt(e.target.value)}
-                    placeholder="Describe your experiment (e.g., 'CUDA edge vision + LiDAR + oscilloscope')..."
+                    placeholder="e.g., 'Need LiDAR + SLAM rig for 2 hours at 11:00 for Robotics Capstone'..."
                     className="flex-1 bg-[#F4F7FB] border border-[#E2E8F0] rounded-[6px] px-3 py-2 text-xs text-[#090D16] placeholder:text-slate-400"
                   />
                   <button
                     type="submit"
+                    disabled={conciergeLoading}
                     className="px-3.5 py-2 rounded-[6px] bg-[#014BBE] text-[#F8FAFC] text-xs font-semibold hover:bg-[#014BBE]/90 shrink-0"
                   >
-                    Match Bundle
+                    {conciergeLoading ? "Matching..." : "Auto-Match"}
                   </button>
-                  {recommendedBundleIds.length > 0 && (
+                  {bundleSummary && (
                     <button
                       type="button"
                       onClick={() => {
@@ -710,7 +782,7 @@ export default function LabLinkConsole() {
                   )}
                 </div>
                 {bundleSummary && (
-                  <p className="font-mono-tech text-[11px] text-[#014BBE] bg-[#F4F7FB] px-2.5 py-1 rounded-[4px] border border-[#E2E8F0]">
+                  <p className="font-mono-tech text-[11px] text-[#014BBE] bg-[#F4F7FB] px-2.5 py-1.5 rounded-[4px] border border-[#E2E8F0]">
                     {bundleSummary}
                   </p>
                 )}
@@ -852,6 +924,7 @@ export default function LabLinkConsole() {
                   equipment.map((item) => {
                     const isSelected = selectedEquipment?.id === item.id;
                     const isBundleMatch = recommendedBundleIds.includes(item.id);
+                    const previewUrl = getEquipmentPreviewSvg(item.id, item.name, item.department);
 
                     return (
                       <article
@@ -863,33 +936,39 @@ export default function LabLinkConsole() {
                             : "border-[#E2E8F0] hover:border-[#014BBE]/50"
                         }`}
                       >
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="font-mono-tech text-[10px] font-semibold uppercase text-[#014BBE]">
-                                {item.department} • {item.bayCode}
-                              </span>
-                              {isBundleMatch && (
-                                <span className="font-mono-tech text-[10px] font-semibold px-1.5 py-0.5 rounded-[4px] bg-[#A2FA8F] text-[#090D16]">
-                                  BUNDLE MATCH
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div className="flex items-start gap-3">
+                            <img
+                              src={previewUrl}
+                              alt={`${item.name} schematic preview`}
+                              className="w-24 h-12 object-cover rounded-[5px] border border-[#E2E8F0] shrink-0 hidden sm:block"
+                            />
+                            <div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="font-mono-tech text-[10px] font-semibold uppercase text-[#014BBE]">
+                                  {item.department} • {item.bayCode}
                                 </span>
-                              )}
-                              {item.maintenanceLock && (
-                                <span className="font-mono-tech text-[10px] font-semibold px-1.5 py-0.5 rounded-[4px] bg-amber-100 text-[#090D16] border border-amber-300">
-                                  CALIBRATION LOCK
-                                </span>
-                              )}
+                                {isBundleMatch && (
+                                  <span className="font-mono-tech text-[10px] font-semibold px-1.5 py-0.5 rounded-[4px] bg-[#A2FA8F] text-[#090D16]">
+                                    AI MATCH
+                                  </span>
+                                )}
+                                {item.maintenanceLock && (
+                                  <span className="font-mono-tech text-[10px] font-semibold px-1.5 py-0.5 rounded-[4px] bg-amber-100 text-[#090D16] border border-amber-300">
+                                    CALIBRATION LOCK
+                                  </span>
+                                )}
+                              </div>
+                              <h2 className="font-display font-bold text-base text-[#090D16] mt-0.5">
+                                {item.name}
+                              </h2>
+                              <p className="font-mono-tech text-[11px] text-slate-600 mt-0.5">{item.specs}</p>
                             </div>
-                            <h2 className="font-display font-bold text-base text-[#090D16] mt-0.5">
-                              {item.name}
-                            </h2>
                           </div>
-                          <span className="font-mono-tech text-[11px] text-slate-500 shrink-0">
+                          <span className="font-mono-tech text-[11px] text-slate-500 shrink-0 self-start">
                             {item.utilizationPct}% UTIL
                           </span>
                         </div>
-
-                        <p className="font-mono-tech text-[11px] text-slate-600 mt-1">{item.specs}</p>
 
                         <div className="mt-3 pt-3 border-t border-[#E2E8F0]">
                           <div className="grid grid-cols-10 gap-1">
@@ -947,7 +1026,16 @@ export default function LabLinkConsole() {
               >
                 {selectedEquipment ? (
                   <>
-                    <div className="border-b border-[#E2E8F0] pb-3.5 space-y-1">
+                    <div className="border-b border-[#E2E8F0] pb-3.5 space-y-2.5">
+                      <img
+                        src={getEquipmentPreviewSvg(
+                          selectedEquipment.id,
+                          selectedEquipment.name,
+                          selectedEquipment.department
+                        )}
+                        alt={`${selectedEquipment.name} hardware inspection diagram`}
+                        className="w-full h-32 object-cover rounded-[6px] border border-[#E2E8F0]"
+                      />
                       <div className="flex items-center justify-between">
                         <span className="font-mono-tech text-[11px] font-semibold text-[#014BBE]">
                           INSPECTION_DRAWER • {selectedEquipment.bayCode}
@@ -956,7 +1044,7 @@ export default function LabLinkConsole() {
                           {selectedEquipment.labRoom}
                         </span>
                       </div>
-                      <h2 className="font-display text-xl font-bold text-[#090D16] flex items-center gap-2">
+                      <h2 className="font-display text-lg font-bold text-[#090D16] flex items-center gap-2">
                         <Cpu className="w-5 h-5 text-[#014BBE] shrink-0" aria-hidden="true" />
                         <span>{selectedEquipment.name}</span>
                       </h2>
@@ -1032,7 +1120,7 @@ export default function LabLinkConsole() {
 
                       {selectedEquipment.maintenanceLock ? (
                         <div className="p-3 rounded-[6px] bg-amber-50 border border-amber-300 text-xs font-semibold text-[#090D16]">
-                          Unit temporarily locked for calibration. Select an open bench or run Smart Matcher.
+                          Unit temporarily locked for calibration. Select an open bench or run AI Concierge.
                         </div>
                       ) : selectedEquipment.hourlySlots[selectedStartHour] === "BOOKED" ? (
                         <button
@@ -1107,7 +1195,7 @@ export default function LabLinkConsole() {
           </>
         )}
 
-        {/* FACULTY APPROVAL & HANDOVER QUEUE */}
+        {/* FACULTY APPROVAL & AI PRE-AUDIT QUEUE */}
         {role === "FACULTY" && (
           <section aria-label="Faculty Mentor Approval & Handover Queue" className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1121,76 +1209,97 @@ export default function LabLinkConsole() {
             </div>
 
             <div className="space-y-3">
-              {bookings.map((bk) => (
-                <article
-                  key={bk.id}
-                  className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-[8px] p-5 flex flex-col md:flex-row md:items-center justify-between gap-4"
-                >
-                  <div className="space-y-1.5">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="font-display font-bold text-base text-[#090D16]">
-                        {bk.projectTitle}
-                      </h3>
-                      <span className="font-mono-tech text-[11px] font-semibold px-2 py-0.5 rounded-[4px] bg-[#014BBE] text-[#F8FAFC]">
-                        DUE: {bk.projectDeadline}
-                      </span>
-                      <span className="font-mono-tech text-[11px] font-semibold px-2 py-0.5 rounded-[4px] bg-[#F4F7FB] border border-[#E2E8F0] text-[#090D16]">
-                        {bk.status}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-700">
-                      Lead: <strong>{bk.studentName}</strong> • Team:{" "}
-                      <span className="font-mono-tech">{bk.collaborators.join(", ")}</span> • Hardware:{" "}
-                      <strong>{bk.equipmentName}</strong>
-                    </p>
-                    <p className="font-mono-tech text-xs text-[#014BBE]">WINDOW: {bk.slotLabel}</p>
-                    {bk.aiRationale && (
-                      <p className="font-mono-tech text-[11px] text-[#090D16] bg-[#F4F7FB] px-3 py-1.5 rounded-[4px] border border-[#E2E8F0]">
-                        ALLOCATION_NOTE: {bk.aiRationale}
+              {bookings.map((bk) => {
+                const audit = facultyAudits[bk.id];
+                return (
+                  <article
+                    key={bk.id}
+                    className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-[8px] p-5 flex flex-col md:flex-row md:items-center justify-between gap-4"
+                  >
+                    <div className="space-y-1.5 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="font-display font-bold text-base text-[#090D16]">
+                          {bk.projectTitle}
+                        </h3>
+                        <span className="font-mono-tech text-[11px] font-semibold px-2 py-0.5 rounded-[4px] bg-[#014BBE] text-[#F8FAFC]">
+                          DUE: {bk.projectDeadline}
+                        </span>
+                        <span className="font-mono-tech text-[11px] font-semibold px-2 py-0.5 rounded-[4px] bg-[#F4F7FB] border border-[#E2E8F0] text-[#090D16]">
+                          {bk.status}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-700">
+                        Lead: <strong>{bk.studentName}</strong> • Team:{" "}
+                        <span className="font-mono-tech">{bk.collaborators.join(", ")}</span> • Hardware:{" "}
+                        <strong>{bk.equipmentName}</strong>
                       </p>
-                    )}
-                  </div>
+                      <p className="font-mono-tech text-xs text-[#014BBE]">WINDOW: {bk.slotLabel}</p>
+                      {bk.aiRationale && (
+                        <p className="font-mono-tech text-[11px] text-[#090D16] bg-[#F4F7FB] px-3 py-1.5 rounded-[4px] border border-[#E2E8F0]">
+                          ALLOCATION_NOTE: {bk.aiRationale}
+                        </p>
+                      )}
+                      {audit && (
+                        <div className="bg-[#090D16] text-[#F8FAFC] rounded-[6px] p-3 text-xs space-y-1">
+                          <span className="font-mono-tech text-[10px] font-semibold text-[#A2FA8F] uppercase">
+                            AI MENTOR READINESS &amp; RIGHT-SIZING AUDIT • {audit.verdict}
+                          </span>
+                          <p className="text-slate-200">{audit.summary}</p>
+                        </div>
+                      )}
+                    </div>
 
-                  <div className="flex flex-wrap items-center gap-2 shrink-0">
-                    {bk.status === "PENDING_FACULTY" && (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => transitionBookingLifecycle(bk.id, "APPROVED")}
-                          className="cta-paradise px-3.5 py-2 rounded-[6px] text-xs font-semibold"
-                        >
-                          Approve Slot
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => transitionBookingLifecycle(bk.id, "REJECTED")}
-                          className="px-3.5 py-2 rounded-[6px] text-xs font-semibold bg-[#F4F7FB] text-[#090D16] border border-[#E2E8F0] hover:bg-red-50 hover:border-red-300"
-                        >
-                          Reject
-                        </button>
-                      </>
-                    )}
-                    {bk.status === "APPROVED" && (
+                    <div className="flex flex-wrap items-center gap-2 shrink-0">
                       <button
                         type="button"
-                        onClick={() => transitionBookingLifecycle(bk.id, "CHECKED_OUT")}
-                        className="cta-paradise px-3.5 py-2 rounded-[6px] text-xs font-semibold flex items-center gap-1.5"
+                        disabled={audit?.loading}
+                        onClick={() => runFacultyAiAudit(bk)}
+                        className="px-3 py-2 rounded-[6px] text-xs font-semibold bg-[#F4F7FB] text-[#014BBE] border border-[#014BBE]/30 hover:border-[#014BBE] flex items-center gap-1.5"
                       >
-                        <PackageCheck className="w-4 h-4" /> Issue Hardware (Check-Out)
+                        <FileCheck2 className="w-3.5 h-3.5" />
+                        {audit?.loading ? "Auditing..." : "AI Pre-Audit"}
                       </button>
-                    )}
-                    {bk.status === "CHECKED_OUT" && (
-                      <button
-                        type="button"
-                        onClick={() => transitionBookingLifecycle(bk.id, "RETURNED")}
-                        className="px-3.5 py-2 rounded-[6px] text-xs font-semibold bg-[#014BBE] text-[#F8FAFC] flex items-center gap-1.5"
-                      >
-                        <RotateCcw className="w-4 h-4" /> Log Inspection &amp; Check-In
-                      </button>
-                    )}
-                  </div>
-                </article>
-              ))}
+
+                      {bk.status === "PENDING_FACULTY" && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => transitionBookingLifecycle(bk.id, "APPROVED")}
+                            className="cta-paradise px-3.5 py-2 rounded-[6px] text-xs font-semibold"
+                          >
+                            Approve Slot
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => transitionBookingLifecycle(bk.id, "REJECTED")}
+                            className="px-3.5 py-2 rounded-[6px] text-xs font-semibold bg-[#F4F7FB] text-[#090D16] border border-[#E2E8F0] hover:bg-red-50 hover:border-red-300"
+                          >
+                            Reject
+                          </button>
+                        </>
+                      )}
+                      {bk.status === "APPROVED" && (
+                        <button
+                          type="button"
+                          onClick={() => transitionBookingLifecycle(bk.id, "CHECKED_OUT")}
+                          className="cta-paradise px-3.5 py-2 rounded-[6px] text-xs font-semibold flex items-center gap-1.5"
+                        >
+                          <PackageCheck className="w-4 h-4" /> Issue Hardware (Check-Out)
+                        </button>
+                      )}
+                      {bk.status === "CHECKED_OUT" && (
+                        <button
+                          type="button"
+                          onClick={() => transitionBookingLifecycle(bk.id, "RETURNED")}
+                          className="px-3.5 py-2 rounded-[6px] text-xs font-semibold bg-[#014BBE] text-[#F8FAFC] flex items-center gap-1.5"
+                        >
+                          <RotateCcw className="w-4 h-4" /> Log Inspection &amp; Check-In
+                        </button>
+                      )}
+                    </div>
+                  </article>
+                );
+              })}
             </div>
           </section>
         )}
@@ -1201,13 +1310,38 @@ export default function LabLinkConsole() {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="font-display text-xl font-bold text-[#090D16] flex items-center gap-2">
                 <BarChart3 className="w-5 h-5 text-[#014BBE]" aria-hidden="true" />
-                Hardware Handover Ledger, Calibration Locks &amp; Telemetry
+                Department Telemetry, Calibration Locks &amp; Handover Ledger
               </h2>
               <span className="font-mono-tech text-[11px] px-2.5 py-1 rounded-[4px] bg-[#FFFFFF] border border-[#E2E8F0] text-[#090D16] flex items-center gap-1.5">
                 <Lock className="w-3.5 h-3.5 text-[#014BBE]" /> TOCTOU &amp; RBAC ENFORCED
               </span>
             </div>
 
+            {/* Department Utilization Analytics Grid */}
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              {departmentTelemetry.map((stat) => (
+                <div
+                  key={stat.dept}
+                  className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-[8px] p-4 space-y-2"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono-tech text-xs font-bold text-[#014BBE]">{stat.dept} LAB</span>
+                    <span className="font-mono-tech text-[11px] text-slate-500">
+                      {stat.count} Units ({stat.locked} Locked)
+                    </span>
+                  </div>
+                  <div className="font-display text-2xl font-bold text-[#090D16]">{stat.avgUtil}%</div>
+                  <div className="w-full h-2 rounded-[3px] bg-[#F4F7FB] overflow-hidden border border-[#E2E8F0]">
+                    <div
+                      className="h-full bg-[#014BBE]"
+                      style={{ width: `${Math.min(100, stat.avgUtil)}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Maintenance / Calibration Lock Control Table */}
             <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-[8px] overflow-hidden">
               <div className="px-5 py-3.5 border-b border-[#E2E8F0] flex items-center justify-between">
                 <h3 className="font-display text-sm font-bold text-[#090D16] flex items-center gap-2">
@@ -1249,6 +1383,7 @@ export default function LabLinkConsole() {
               </div>
             </div>
 
+            {/* Physical Handover Ledger */}
             <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-[8px] p-5 space-y-3">
               <h3 className="font-display text-sm font-bold text-[#090D16]">
                 Physical Check-Out / Check-In Handover Ledger
@@ -1478,5 +1613,7 @@ export default function LabLinkConsole() {
     </div>
   );
 }
+
+
 
 
