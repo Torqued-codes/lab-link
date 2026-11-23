@@ -90,7 +90,7 @@ const HOURS = [9, 10, 11, 12, 13, 14, 15, 16, 17, 18];
 const SANDBOX_PERSONAS: Record<Role, { badge: string; fullName: string; workspaceTitle: string }> = {
   STUDENT: {
     badge: "Student: Aarav",
-    fullName: "Aarav Sharma (1MS23CS042)",
+    fullName: "Aarav Sharma (24ETCS000001)",
     workspaceTitle: "Student Workbench",
   },
   FACULTY: {
@@ -112,7 +112,7 @@ const INITIAL_PROJECTS: StudentProject[] = [
     category: "Capstone",
     deadline: "2026-11-26",
     abstract: "Deploying quantized YOLOv8 TensorRT inference with 2D LiDAR fusion for obstacle avoidance.",
-    collaborators: ["1MS23CS042", "1MS23EC019"],
+    collaborators: ["24ETCS000001", "24ETEC000019"],
   },
   {
     id: "proj_hack",
@@ -120,7 +120,7 @@ const INITIAL_PROJECTS: StudentProject[] = [
     category: "Hackathon",
     deadline: "2026-11-25",
     abstract: "High-frequency oscilloscope differential power trace capture on FPGA soft-core.",
-    collaborators: ["1MS23CS088"],
+    collaborators: ["24ETCS000088"],
   },
 ];
 
@@ -420,7 +420,7 @@ export default function LabLinkConsole() {
       category: newProjCategory,
       deadline: newProjDeadline,
       abstract: newProjAbstract.trim() || "Laboratory hardware validation & prototyping milestone.",
-      collaborators: ["1MS23CS042"],
+      collaborators: ["24ETCS000001"],
     };
     setProjects((prev) => [created, ...prev]);
     setActiveProjectId(created.id);
@@ -763,7 +763,7 @@ export default function LabLinkConsole() {
                     type="text"
                     value={smartPrompt}
                     onChange={(e) => setSmartPrompt(e.target.value)}
-                    placeholder="e.g., 'Need LiDAR + SLAM rig for 2 hours at 11:00 for Robotics Capstone'..."
+                    placeholder="e.g., 'Need LiDAR + SLAM rig for 4 hours at 11:00 for Robotics Capstone'..."
                     className="flex-1 bg-[#F4F7FB] border border-[#E2E8F0] rounded-[6px] px-3 py-2 text-xs text-[#090D16] placeholder:text-slate-400"
                   />
                   <button
@@ -855,9 +855,9 @@ export default function LabLinkConsole() {
                           addCollaboratorTag();
                         }
                       }}
-                      placeholder="+ Roll No."
-                      aria-label="Add collaborator roll number"
-                      className="w-24 font-mono-tech text-[10px] bg-[#F4F7FB] border border-[#E2E8F0] rounded-[4px] px-1.5 py-0.5"
+                      placeholder="+ Reg No."
+                      aria-label="Add collaborator registration number"
+                      className="w-28 font-mono-tech text-[10px] bg-[#F4F7FB] border border-[#E2E8F0] rounded-[4px] px-1.5 py-0.5"
                     />
                     <button
                       type="button"
@@ -947,7 +947,7 @@ export default function LabLinkConsole() {
                             <img
                               src={previewUrl}
                               alt={item.name}
-                              className="w-28 h-16 object-cover rounded-[5px] border border-[#E2E8F0] bg-[#090D16] shrink-0 hidden sm:block"
+                              className="w-28 h-20 object-contain rounded-[5px] border border-[#E2E8F0] shrink-0 hidden sm:block"
                             />
                             <div>
                               <div className="flex flex-wrap items-center gap-2">
@@ -1040,7 +1040,7 @@ export default function LabLinkConsole() {
                           selectedEquipment.department
                         )}
                         alt={selectedEquipment.name}
-                        className="w-full h-44 object-cover rounded-[6px] border border-[#E2E8F0] bg-[#090D16]"
+                        className="w-full h-auto max-h-60 object-contain rounded-[6px] border border-[#E2E8F0]"
                       />
                       <div className="flex items-center justify-between">
                         <span className="font-mono-tech text-[11px] font-semibold text-[#014BBE]">
@@ -1104,7 +1104,7 @@ export default function LabLinkConsole() {
 
                         <div>
                           <label htmlFor="inspect-dur" className="block font-mono-tech text-[10px] text-slate-500 mb-1">
-                            DURATION
+                            DURATION (UP TO 8H)
                           </label>
                           <select
                             id="inspect-dur"
@@ -1115,6 +1115,9 @@ export default function LabLinkConsole() {
                             <option value={1}>1 Hour</option>
                             <option value={2}>2 Hours</option>
                             <option value={3}>3 Hours</option>
+                            <option value={4}>4 Hours (Half-Day)</option>
+                            <option value={6}>6 Hours (Extended Run)</option>
+                            <option value={8}>8 Hours (Full Lab Day)</option>
                           </select>
                         </div>
                       </div>
