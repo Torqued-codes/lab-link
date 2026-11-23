@@ -22,6 +22,14 @@ body {
   line-height: 1.45;
 }
 
+.lab-grid-bg {
+  background-color: var(--canvas-tint);
+  background-image:
+    linear-gradient(to right, rgba(1, 75, 190, 0.085) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(1, 75, 190, 0.085) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
 h1, h2, h3, .font-display {
   font-family: var(--font-display), system-ui, sans-serif;
   letter-spacing: -0.03em;
@@ -55,7 +63,6 @@ h1, h2, h3, .font-display {
 .cta-paradise:hover:not(:disabled) {
   background-color: #90f27b;
 }
-
 .cta-paradise:disabled {
   opacity: 0.5;
   cursor: not-allowed;

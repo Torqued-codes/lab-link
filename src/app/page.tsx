@@ -439,12 +439,13 @@ export default function LabLinkConsole() {
     }
   }
 
+
   const openBenchesCount = equipment.filter((e) => !e.maintenanceLock).length;
   const pendingApprovalsCount = bookings.filter((b) => b.status === "PENDING_FACULTY").length;
   const checkedOutCount = bookings.filter((b) => b.status === "CHECKED_OUT").length;
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#F4F7FB] text-[#090D16]">
+    <div className="min-h-screen flex flex-col lab-grid-bg text-[#090D16]">
       {/* Precision Top Navigation Bar */}
       <header className="sticky top-0 z-30 border-b border-[#E2E8F0] bg-[#FFFFFF]">
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
