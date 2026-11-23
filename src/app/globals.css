@@ -9,7 +9,6 @@
   --card-white: #FFFFFF;
   --snow-text: #F8FAFC;
   --hairline-light: #E2E8F0;
-  --hairline-dark: rgba(255, 255, 255, 0.14);
 }
 
 html {
@@ -20,7 +19,7 @@ body {
   background-color: var(--canvas-tint);
   color: var(--obsidian-ink);
   font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
-  line-height: 1.5;
+  line-height: 1.45;
 }
 
 h1, h2, h3, .font-display {
@@ -46,24 +45,18 @@ h1, h2, h3, .font-display {
   }
 }
 
-.hero-dazzling {
-  background-color: var(--dazzling-blue);
-  background-image: radial-gradient(
-    circle at 82% 28%,
-    rgba(44, 190, 241, 0.42) 0%,
-    rgba(1, 75, 190, 0) 58%
-  );
-}
 .cta-paradise {
   background-color: var(--paradise-green);
   color: var(--obsidian-ink);
-  border: 1px solid rgba(9, 13, 22, 0.14);
+  border: 1px solid rgba(9, 13, 22, 0.16);
   transition: background-color 0.15s ease;
 }
+
 .cta-paradise:hover:not(:disabled) {
   background-color: #90f27b;
 }
+
 .cta-paradise:disabled {
-  opacity: 0.55;
+  opacity: 0.5;
   cursor: not-allowed;
 }
